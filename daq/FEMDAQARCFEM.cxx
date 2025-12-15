@@ -105,22 +105,30 @@ void FEMDAQARCFEM::Receiver( ){
                   FEM.buffer.insert(FEM.buffer.end(), &buf_rcv[1], &buf_rcv[size]);
                   const size_t bufferSize = FEM.buffer.size();
                   FEM.mutex_mem.unlock();
-                    if (runConfig.verboseLevel >= RunConfig::Verbosity::Debug)
+                    if (runConfig.verboseLevel >= RunConfig::Verbosity::Debug){
+                      //packetAPI.DataPacket_Print(&buf_rcv[1], size-1);
                       std::cout<<"Packet buffered with size "<<(int)size-1<<" queue size: "<<bufferSize<<std::endl;
+                    }
                     if( bufferSize > 1024*1024*1024){
                       std::string error ="Buffer FULL with size "+std::to_string(bufferSize/sizeof(uint16_t))+" bytes";
                      throw std::runtime_error(error);
                     }
 
                } else if (packetAPI.isMFrame(&buf_rcv[1])){
-                  FEM.mutex_mem.lock();
+                  //FEM.mutex_mem.lock();
                   FEM.cmd_rcv++;
-                  FEM.buffer.insert(FEM.buffer.end(), &buf_rcv[1], &buf_rcv[size]);
-                  const size_t bufferSize = FEM.buffer.size();
-                  FEM.mutex_mem.unlock();
-                  if (runConfig.verboseLevel >= RunConfig::Verbosity::Info)packetAPI.DataPacket_Print(&buf_rcv[1], size-1);
+                  //FEM.buffer.insert(FEM.buffer.end(), &buf_rcv[1], &buf_rcv[size]);
+                  //const size_t bufferSize = FEM.buffer.size();
+                  //FEM.mutex_mem.unlock();
+                  if (runConfig.verboseLevel >= RunConfig::Verbosity::Info){
+                    std::cout<<"MONI PACKET"<<std::endl;
+                    packetAPI.DataPacket_Print(&buf_rcv[1], size-1);
+                  }
                 } else {
-                  if (runConfig.verboseLevel >= RunConfig::Verbosity::Info)packetAPI.DataPacket_Print(&buf_rcv[1], size-1);
+                  if (runConfig.verboseLevel >= RunConfig::Verbosity::Info){
+                    std::cout<<"INFO PACKET"<<std::endl;
+                    packetAPI.DataPacket_Print(&buf_rcv[1], size-1);
+                  }
                   //std::cout<<"Frame is neither data or monitoring Val 0x"<<std::hex<<buf_rcv[1]<<std::dec<<std::endl;
                   FEM.cmd_rcv++;
                 }
@@ -153,23 +161,21 @@ void FEMDAQARCFEM::EventBuilder( ){
 
   SignalEvent sEvent;
   const double startTime = FEMDAQ::getCurrentTime();
-
+  double fileStart = FEMDAQ::getCurrentTime();
   uint32_t ev_count = 0;
   uint64_t ts = 0;
+  uint64_t fileSize =0;
 
   int fileIndex = 1;
   const std::string baseName = MakeBaseFileName(); 
   std::string fileName = MakeFileName(baseName, fileIndex);
 
-  std::unique_ptr<ROOT::RNTupleModel> model = nullptr;
   std::unique_ptr<ROOT::RNTupleWriter> writer = nullptr;
-
     if (!runConfig.readOnly) {
-      writeMetadataStart(fileName, runConfig.GetFileName(), startTime);
       // Create model
-      model = sEvent.CreateModel();
+      auto model = sEvent.CreateModel();
       // Create writer
-      writer = sEvent.CreateWriter(fileName, std::move(model));
+      writer = ROOT::RNTupleWriter::Recreate(std::move(model),"SignalEvents", fileName);
     }
   
   bool newEvent = true;
@@ -198,52 +204,61 @@ void FEMDAQARCFEM::EventBuilder( ){
       if(newEvent){//Save Event if closed
         sEvent.eventID = ev_count;
         sEvent.timestamp =  (double) ts * 2E-8 + startTime;
-          
+
         if (writer){
-
-           if (std::filesystem::file_size(fileName) >= runConfig.fileSize ) {
-
-             writer->Fill();
+            sEvent.Fill();
+            writer->Fill();
+           
+           if(storedEvents%100 == 0){
+             std::cout<<"Events "<<ev_count<<" stored " <<storedEvents + 1 <<std::endl;
+             //std::cout<<"File size "<<std::filesystem::file_size(fileName)<<" "<<runConfig.fileSize<<std::endl;
+             if(storedEvents>0)writer->CommitCluster();
+             fileSize = std::filesystem::file_size(fileName);
+           }
+           
+           if (fileSize >= runConfig.fileSize ) {
+             
              writer.reset();  
 
+             writeMetadataStart(fileName, runConfig.GetFileName(), fileStart);
              writeMetadataEnd(fileName, FEMDAQ::getCurrentTime());
-
+             
              fileIndex++;
+             fileSize=0;
 
              // Create new writer + new model (must be recreated!)
              fileName = MakeFileName(baseName, fileIndex);
-             writeMetadataStart(fileName, runConfig.GetFileName(), FEMDAQ::getCurrentTime());
-             auto newModel = sEvent.CreateModel();
-             writer = SignalEvent::CreateWriter(fileName, std::move(newModel));
+             fileStart = FEMDAQ::getCurrentTime();
+             
+             std::cout<<"New file "<<fileName<<" "<<std::endl;
 
-           } else {
-             writer->Fill();
+             auto model = sEvent.CreateModel();
+             writer = ROOT::RNTupleWriter::Recreate(std::move(model),"SignalEvents", fileName);
            }
-
-          if(ev_count%100 == 0)std::cout<<"Events "<<storedEvents<<std::endl;
 
           for (auto &FEM : FEMArray)FEM.pendingEvent = true;
 
         }
         ++FEMDAQ::storedEvents;
-        sEvent.signals.clear();
+        sEvent.Clear();
       }
 
       if (FEMDAQ::stopEventBuilder){
          for (auto &FEM : FEMArray)
            std::cout<<"Buffer size "<<FEM.buffer.size()<<std::endl;
          tC++;
-         if(tC>=1000)break;
+         if(tC>=5000)break;
       }
-    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
 
   }
 
   if (writer){
     writer.reset();
+    writeMetadataStart(fileName, runConfig.GetFileName(), fileStart);
     writeMetadataEnd(fileName, FEMDAQ::getCurrentTime());
   }
 
-  std::cout<<"End of event builder"<<std::endl;
+  std::cout<<"End of event builder "<<storedEvents<<" events acquired"<<std::endl;
 
 }

@@ -53,7 +53,6 @@ std::string FEMDAQ::MakeBaseFileName( ){
     base += "_"+runConfig.tag;
     base += "_"+runConfig.experiment;
     base += "_"+runConfig.type;
-    base += ".";
 
     fs::path full = fs::path(directory) / base;
     return full.string();

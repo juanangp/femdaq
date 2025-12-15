@@ -18,7 +18,7 @@ class FEMProxy : public FEMSocket {
     FEMProxy(FEMProxy&&) = default;
     FEMProxy& operator=(FEMProxy&&) = default;
     
-    bool pendingEvent=false;
+    bool pendingEvent=true;
     bool active = true;
 
     int cmd_sent=0;

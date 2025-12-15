@@ -94,7 +94,7 @@ void CommandFetcher::execFile(const std::string& filename) {
 
     std::string line;
     while (std::getline(file, line)) {
-        if (shutdownRequested()) break;
+        //if (shutdownRequested()) break;
         if (line.empty() || line[0] == '#') continue;
         std::cout << "> " << line << std::endl;
         handleCommand(line);

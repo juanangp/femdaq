@@ -9,48 +9,53 @@
 
 class SignalEvent {
 public:
-    struct Signal {
-        int signalID = 0;
-        std::vector<short> pulse;
-        Signal() = default;
-        Signal(int sID, std::vector<short> p)
-            : signalID(sID), pulse(std::move(p)) {}
-    };
 
-    int eventID = 0;
+    int eventID;
     double timestamp = 0;
-    std::vector<Signal> signals;
+    std::vector<int> signalsID;
+    std::vector<std::vector<short>> pulses;
+
+    std::shared_ptr<int> evID;
+    std::shared_ptr<double> tS;
+    std::shared_ptr<std::vector<int>> sID;
+    std::shared_ptr< std::vector<std::vector<short>> > pls;
 
     SignalEvent() = default;
     ~SignalEvent() = default;
 
-    inline void AddSignal(int sID, const std::vector<short> &pulses){
-      bool isSID = std::any_of(signals.begin(), signals.end(),
-                       [sID](const Signal& s){ return s.signalID == sID; });
+    inline void AddSignal(int sID, const std::vector<short> &pulse){
+      bool isSID = std::any_of(signalsID.begin(), signalsID.end(),
+                       [sID](const auto& s){ return s == sID; });
 
         if (isSID){
           std::cout<<"Warning sID "<< sID<< " already exist for this event"<<std::endl;
           return;
         }
-      Signal s (sID, pulses);
-      signals.emplace_back(std::move(s));
+
+      signalsID.emplace_back(sID);
+      pulses.emplace_back(std::move(pulse));
     }
 
-    static std::unique_ptr<ROOT::RNTupleModel> CreateModel() {
+    inline void Clear(){
+      signalsID.clear();
+      pulses.clear();
+    }
+
+    std::unique_ptr<ROOT::RNTupleModel> CreateModel() {
         auto model = ROOT::RNTupleModel::Create();
 
-        model->MakeField<int>("eventID");
-        model->MakeField<double>("timestamp");
-        model->MakeField<std::vector<Signal>>("signals");
+        evID = model->MakeField<int>("eventID");
+        tS = model->MakeField<double>("timestamp");
+        sID = model->MakeField<std::vector<int>>("signalsID");
+        pls = model->MakeField< std::vector<std::vector<short>> >("pulses");
 
         return model;
     }
 
-    static std::unique_ptr<ROOT::RNTupleWriter> CreateWriter(
-        const std::string &filename,
-        std::unique_ptr<ROOT::RNTupleModel> model)
-    {
-        return ROOT::RNTupleWriter::Recreate(
-            std::move(model), "SignalEvents", "sEvents");
+    void Fill( ){
+      *evID = eventID;
+      *tS = timestamp;
+      *sID = signalsID;
+      *pls = pulses;
     }
 };

@@ -23,8 +23,6 @@ FetchContent_Declare(
     GIT_TAG v2.4.2)
 FetchContent_MakeAvailable(CLI11)
 
-add_executable(${PROJECT_NAME} main.cxx)
-
 file(
     GLOB_RECURSE
     SOURCE_FILES
@@ -37,22 +35,23 @@ file(
     daq/FEMINOSPacket.cxx
     daq/ARCPacket.cxx)
 
-#add_library(${PROJECT_NAME} SHARED ${SOURCE_FILES})
+add_library(${PROJECT_NAME} SHARED ${SOURCE_FILES})
 
 target_include_directories(
     ${PROJECT_NAME}
-    PRIVATE ${ROOT_INCLUDE_DIRS}
+    PUBLIC ${ROOT_INCLUDE_DIRS}
             daq)
 
-#install(TARGETS ${PROJECT_NAME} DESTINATION lib)
 
 target_link_libraries(
-    ${PROJECT_NAME}
-    PRIVATE CLI11::CLI11 yaml-cpp readline ${ROOT_LIBRARIES})
+    ${PROJECT_NAME} CLI11::CLI11 yaml-cpp readline ${ROOT_LIBRARIES})
 
-target_sources(${PROJECT_NAME} PRIVATE ${SOURCE_FILES})
+install(TARGETS ${PROJECT_NAME} DESTINATION lib)
 
+#target_sources(${PROJECT_NAME} PRIVATE ${SOURCE_FILES})
+add_executable(femclient main.cxx)
+target_link_libraries(femclient LINK_PUBLIC ${PROJECT_NAME} CLI11::CLI11 yaml-cpp readline ${ROOT_LIBRARIES})
 # Install the binary and the viewer script
-install(TARGETS ${PROJECT_NAME} DESTINATION bin)
+install(TARGETS femclient DESTINATION bin)
 
 

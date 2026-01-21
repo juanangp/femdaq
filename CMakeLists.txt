@@ -54,4 +54,14 @@ target_link_libraries(femclient LINK_PUBLIC ${PROJECT_NAME} CLI11::CLI11 yaml-cp
 # Install the binary and the viewer script
 install(TARGETS femclient DESTINATION bin)
 
+add_executable(FEMDaqRoot femdaqROOT.cxx)
+target_link_libraries(FEMDaqRoot LINK_PUBLIC ${PROJECT_NAME} CLI11::CLI11 yaml-cpp readline ${ROOT_LIBRARIES})
+
+install(TARGETS FEMDaqRoot DESTINATION bin)
+
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/macros
+       DESTINATION .
+       COMPONENT install
+       )
+include(thisFEMDAQ)
 

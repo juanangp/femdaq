@@ -6,7 +6,6 @@
 #include <regex>
 #include <charconv>
 
-#include <TFile.h>
 #include <TObjString.h>
 
 std::atomic<bool> FEMDAQ::abrt(false);
@@ -107,49 +106,54 @@ void FEMDAQ::SendCommand(const char* cmd, bool wait){
 
 }
 
-void FEMDAQ::writeMetadataStart( const std::string &fileName, const std::string &rCFileName, const double startTime){
+void FEMDAQ::OpenRootFile(const std::string &fileName, SignalEvent &sEvent, const double startTime){
 
-  // TFile in UPDATE mode to add metadata
-    TFile file(fileName.c_str(), "UPDATE");
-    if (!file.IsOpen()) {
-        std::cout << "ERROR: Could not open ROOT file " << fileName << std::endl;
-        return;
-    }
+  file.reset();
+  event_tree.reset();
 
-    YAML::Node cfg = YAML::LoadFile(rCFileName);
-    std::string yamlDump = YAML::Dump(cfg);
+  file = std::make_unique<TFile>(fileName.c_str(), "RECREATE");
+  event_tree = std::make_unique<TTree>("SignalEvent", "Signal events");
+  event_tree->Branch("eventID", &sEvent.eventID);
+  event_tree->Branch("timestamp", &sEvent.timestamp);
+  event_tree->Branch("signalsID", &sEvent.signalsID);
+  event_tree->Branch("pulses", &sEvent.pulses);
+  
+  const std::string yamlDump = runConfig.Dump();
+  TObjString yamlObj(yamlDump.c_str());
+  yamlObj.Write("RunConfigYAML", TObject::kOverwrite);
 
-    TObjString yamlObj(yamlDump.c_str());
-    yamlObj.Write("RunConfigYAML", TObject::kOverwrite);
+  const std::string rCFileName = runConfig.GetFileName();
+  TObjString fnameObj(rCFileName.c_str());
+  fnameObj.Write("yaml_fileName", TObject::kOverwrite);
 
-    TObjString fnameObj(fileName.c_str());
-    fnameObj.Write("yaml_fileName", TObject::kOverwrite);
-
-    std::ostringstream ts;
-    ts << std::fixed << std::setprecision(6) << startTime;
-    TObjString tsObj(ts.str().c_str());
-    tsObj.Write("startTime", TObject::kOverwrite);
-
-    file.Close();
+  std::ostringstream ts;
+  ts << std::fixed << std::setprecision(6) << startTime;
+  TObjString tsObj(ts.str().c_str());
+  tsObj.Write("startTime", TObject::kOverwrite);
 }
 
-void FEMDAQ::writeMetadataEnd( const std::string &fileName, const double endTime){
+void FEMDAQ::CloseRootFile( const double endTime){
 
-    TFile file(fileName.c_str(), "UPDATE");
-    if (!file.IsOpen()) {
-        std::cerr << "ERROR: Could not open ROOT file " << fileName << std::endl;
-        return;
-    }
-
+   file->cd();
+   event_tree->Write(nullptr, TObject::kOverwrite);
    std::ostringstream ts;
    ts << std::fixed << std::setprecision(6) << endTime;
    TObjString tsObj(ts.str().c_str());
    tsObj.Write("endTime", TObject::kOverwrite);
-
-   file.Close();
-
+   file->Close();
 }
 
+void FEMDAQ::FillEvent(const double eventTime, double &lastTimeSaved){
+
+event_tree->Fill();
+double elapsed = eventTime - lastTimeSaved;
+
+  if(storedEvents%1000==0 || elapsed >100 ){
+    event_tree->AutoSave("SaveSelf");
+    lastTimeSaved = eventTime;
+  }
+  
+}
 
 void FEMDAQ::SendCommand(const char* cmd, FEMProxy &FEM, bool wait){
 

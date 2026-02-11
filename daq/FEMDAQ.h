@@ -5,8 +5,12 @@
 #include <functional>
 #include <thread>
 
+#include <TFile.h>
+#include <TTree.h>
+
 #include "FEMProxy.h"
 #include "RunConfig.h"
+#include "SignalEvent.h"
 
 class FEMDAQ {
    public:
@@ -31,10 +35,15 @@ class FEMDAQ {
 
     uint32_t ev_count=0;
 
+    std::unique_ptr<TFile> file = nullptr;
+    std::unique_ptr<TTree> event_tree = nullptr;
+
+    void OpenRootFile(const std::string &fileName, SignalEvent &sEvent, const double startTime);
+    void CloseRootFile(const double endTime);
+    void FillEvent(const double eventTime, double &lastTimeSaved);
+
     static inline double lastEvTime = 0;
     static double getCurrentTime();
-    static void writeMetadataStart (const std::string &fileName, const std::string &rCFileName, const double startTime);
-    static void writeMetadataEnd( const std::string &fileName, const double endTime);
 
     std::string MakeBaseFileName( );
     std::string MakeFileName(const std::string& base, int index);

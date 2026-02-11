@@ -161,23 +161,19 @@ void FEMDAQARCFEM::EventBuilder( ){
 
   SignalEvent sEvent;
   const double startTime = FEMDAQ::getCurrentTime();
-  double fileStart = FEMDAQ::getCurrentTime();
+  double lastTimeSaved = startTime;
   uint32_t ev_count = 0;
   uint64_t ts = 0;
   uint64_t fileSize =0;
 
   int fileIndex = 1;
-  const std::string baseName = MakeBaseFileName(); 
+  const std::string baseName = MakeBaseFileName();
   std::string fileName = MakeFileName(baseName, fileIndex);
 
-  std::unique_ptr<ROOT::RNTupleWriter> writer = nullptr;
     if (!runConfig.readOnly) {
-      // Create model
-      auto model = sEvent.CreateModel();
-      // Create writer
-      writer = ROOT::RNTupleWriter::Recreate(std::move(model),"SignalEvents", fileName);
+      OpenRootFile(fileName, sEvent, FEMDAQ::getCurrentTime());
     }
-  
+
   bool newEvent = true;
   bool emptyBuffer = true;
   int tC =0;
@@ -205,35 +201,28 @@ void FEMDAQARCFEM::EventBuilder( ){
         sEvent.eventID = ev_count;
         sEvent.timestamp =  (double) ts * 2E-8 + startTime;
 
-        if (writer){
-            sEvent.Fill();
-            writer->Fill();
+        if (file){
+            FillEvent(sEvent.timestamp, lastTimeSaved);
            
            if(storedEvents%100 == 0){
              std::cout<<"Events "<<ev_count<<" stored " <<storedEvents + 1 <<std::endl;
              //std::cout<<"File size "<<std::filesystem::file_size(fileName)<<" "<<runConfig.fileSize<<std::endl;
-             if(storedEvents>0)writer->CommitCluster();
              fileSize = std::filesystem::file_size(fileName);
            }
            
            if (fileSize >= runConfig.fileSize ) {
              
-             writer.reset();  
+             CloseRootFile(FEMDAQ::getCurrentTime());
 
-             writeMetadataStart(fileName, runConfig.GetFileName(), fileStart);
-             writeMetadataEnd(fileName, FEMDAQ::getCurrentTime());
-             
              fileIndex++;
              fileSize=0;
 
              // Create new writer + new model (must be recreated!)
              fileName = MakeFileName(baseName, fileIndex);
-             fileStart = FEMDAQ::getCurrentTime();
              
              std::cout<<"New file "<<fileName<<" "<<std::endl;
 
-             auto model = sEvent.CreateModel();
-             writer = ROOT::RNTupleWriter::Recreate(std::move(model),"SignalEvents", fileName);
+             OpenRootFile(fileName, sEvent, FEMDAQ::getCurrentTime());
            }
 
           for (auto &FEM : FEMArray)FEM.pendingEvent = true;
@@ -253,10 +242,8 @@ void FEMDAQARCFEM::EventBuilder( ){
 
   }
 
-  if (writer){
-    writer.reset();
-    writeMetadataStart(fileName, runConfig.GetFileName(), fileStart);
-    writeMetadataEnd(fileName, FEMDAQ::getCurrentTime());
+  if (file){
+    CloseRootFile(FEMDAQ::getCurrentTime());
   }
 
   std::cout<<"End of event builder "<<storedEvents<<" events acquired"<<std::endl;

@@ -114,23 +114,31 @@ bool interactive = true;
 
 auto files = GetFilesFromPattern(filePattern);
 
-for (const auto &fileName : files) {
-cout<<"Opening file "<<fileName<<endl;
+auto chain = std::make_unique<TChain>("SignalEvent");
 
-auto model = ROOT::RNTupleModel::Create();
-auto evID = model->MakeField<int>("eventID");
-auto tS = model->MakeField<double>("timestamp");
-auto sID = model->MakeField<std::vector<int>>("signalsID");
-auto pls = model->MakeField< std::vector<std::vector<short>> >("pulses");
-auto reader = ROOT::RNTupleReader::Open(std::move(model),"SignalEvents",fileName);
+  for (const auto &fileName : files)
+    if(fileName.find(".root") !=std::string::npos){
+    cout<<"Opening file "<<fileName<<endl;
+    chain->Add(fileName.c_str(), -1);
+  }
 
-const size_t entries = reader->GetNEntries();
+const size_t entries = chain->GetEntries();
 cout<<"Entries "<<entries<<endl;
+
+int eventID;
+double timestamp = 0;
+std::vector<int>* signalsID = nullptr; 
+std::vector<std::vector<short>>* pulses = nullptr;
+
+chain->SetBranchAddress("eventID", &eventID);
+chain->SetBranchAddress("timestamp", &timestamp);
+chain->SetBranchAddress("signalsID", &signalsID);
+chain->SetBranchAddress("pulses", &pulses);
 
   for(size_t entryID = 0; entryID < entries; entryID++){
     
     std::vector<TH1S *> histos;
-    reader->LoadEntry(entryID);
+    chain->GetEntry(entryID);
       
       if(interactive)
         for(int i=0;i<4;i++){
@@ -138,19 +146,17 @@ cout<<"Entries "<<entries<<endl;
           hs.emplace_back(h);
         }
 
-    std::vector<std::vector<short>> pulses = *pls;
-    std::vector<int> signalsID = *sID;
     double totArea=0;
     double areaX =0;
     double areaY=0;
     double posX = 0, posY=0;
-        for (size_t s = 0; s<signalsID.size();s++){
-          const int signalID = signalsID[s];
+        for (size_t s = 0; s<signalsID->size();s++){
+          const int signalID = signalsID->at(s);
           const int card = signalID/72;
           const int channel = signalID%72;
           double amplitude=0, area=0;
           int maxPos=0;
-          auto pulse = pulses[s];
+          auto pulse = pulses->at(s);
           GetParamsFromPulse(pulse, amplitude, area,maxPos);
 
           if(area==0 || amplitude == 0)continue;
@@ -247,6 +253,5 @@ cout<<"Entries "<<entries<<endl;
     }
   }
 
-}
 
 }

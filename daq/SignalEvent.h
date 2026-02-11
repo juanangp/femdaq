@@ -1,11 +1,10 @@
 #pragma once
 
-#include <ROOT/RNTuple.hxx>
-#include <ROOT/RNTupleModel.hxx>
-#include <ROOT/RNTupleWriter.hxx>
 #include <vector>
 #include <memory>
 #include <string>
+#include <iostream>
+#include <algorithm>
 
 class SignalEvent {
 public:
@@ -14,11 +13,6 @@ public:
     double timestamp = 0;
     std::vector<int> signalsID;
     std::vector<std::vector<short>> pulses;
-
-    std::shared_ptr<int> evID;
-    std::shared_ptr<double> tS;
-    std::shared_ptr<std::vector<int>> sID;
-    std::shared_ptr< std::vector<std::vector<short>> > pls;
 
     SignalEvent() = default;
     ~SignalEvent() = default;
@@ -41,21 +35,4 @@ public:
       pulses.clear();
     }
 
-    std::unique_ptr<ROOT::RNTupleModel> CreateModel() {
-        auto model = ROOT::RNTupleModel::Create();
-
-        evID = model->MakeField<int>("eventID");
-        tS = model->MakeField<double>("timestamp");
-        sID = model->MakeField<std::vector<int>>("signalsID");
-        pls = model->MakeField< std::vector<std::vector<short>> >("pulses");
-
-        return model;
-    }
-
-    void Fill( ){
-      *evID = eventID;
-      *tS = timestamp;
-      *sID = signalsID;
-      *pls = pulses;
-    }
 };

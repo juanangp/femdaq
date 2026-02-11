@@ -11,7 +11,7 @@ RunConfig::RunConfig(const std::string& fN) : fileName(fN)  {
 
 void RunConfig::loadConfig() {
 
-    YAML::Node root = YAML::LoadFile(fileName);
+    root = YAML::LoadFile(fileName);
 
     if (!root["run"])
         throw std::runtime_error("Missing 'run' section in YAML file");
@@ -32,7 +32,6 @@ void RunConfig::loadConfig() {
     nEvents      = getOrDefault(run, "nEvents", nEvents);
     maxFileSize  = getOrDefault(run, "maxFileSize", maxFileSize);
     fileSize = ParseSizeToBytes(maxFileSize);
-    
     electronics  = getOrDefault(run, "electronics", electronics);
 
     if (verbose == "debug") verboseLevel = Verbosity::Debug;

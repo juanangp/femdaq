@@ -5,38 +5,44 @@ void DrawPulses(const std::string &fileName){
 
 //SignalEvent sEvent;
 
-auto model = ROOT::RNTupleModel::Create();
-auto evID = model->MakeField<int>("eventID");
-auto tS = model->MakeField<double>("timestamp");
-auto sID = model->MakeField<std::vector<int>>("signalsID");
-auto pls = model->MakeField< std::vector<std::vector<short>> >("pulses");
-auto reader = ROOT::RNTupleReader::Open(std::move(model),"SignalEvents",fileName);
+auto chain = std::make_unique<TChain>("SignalEvent");
+
+chain->Add(fileName.c_str(), -1);
+
+int eventID;
+double timestamp = 0;
+std::vector<int>* signalsID = nullptr; 
+std::vector<std::vector<short>>* pulses = nullptr;
+
+chain->SetBranchAddress("eventID", &eventID);
+chain->SetBranchAddress("timestamp", &timestamp);
+chain->SetBranchAddress("signalsID", &signalsID);
+chain->SetBranchAddress("pulses", &pulses);
 
 std::vector<THStack *> hs;
 
 TCanvas *can = new TCanvas("c","",800,600);
 can->Divide(2,2);
-const size_t entries = reader->GetNEntries();
+const size_t entries = chain->GetEntries();
 cout<<"Entries "<<entries<<endl;
   for(size_t entryID = 0; entryID < entries; entryID++){
     std::vector<TH1S *> histos;
-    reader->LoadEntry(entryID);
+    chain->GetEntry(entryID);
     for(int i=0;i<4;i++){
       auto h = new THStack( );
       hs.emplace_back(h);
     }
-    std::vector<std::vector<short>> pulses = *pls;
-    std::vector<int> signalsID = *sID;
-        for (size_t s = 0; s<signalsID.size();s++){
-          const int signalID = signalsID[s];
+
+        for (size_t s = 0; s<signalsID->size();s++){
+          const int signalID = signalsID->at(s);
           const int card = signalID/72;
           const int channel = signalID%72;
           std::string hName = "Hist_"+std::to_string(signalID);
-          auto pulse = pulses[s];
+          auto &pulse = pulses->at(s);
           auto histo = new TH1S (hName.c_str(),hName.c_str(),pulse.size(),0.,pulse.size());
             for(int p=0;p<pulse.size();p++){
               //cout<<p<<" "<<pulse[p]<<std::endl;
-              histo->SetBinContent(p+1,pulse[p]);
+              histo->SetBinContent(p+1,pulse.at(p) );
             }
           short max = *std::max_element(pulse.begin(), pulse.end());
           if(max > 500)std::cout<<"Card "<<card<<" channel "<<channel<<" max "<<max<<endl;

@@ -38,16 +38,18 @@ public:
 
 // Generic template
     template<typename T>
-    T getOrDefault(const YAML::Node& node, const std::string& key, const T& def) {
+    T getOrDefault( YAML::Node& node, const std::string& key, const T& def) {
         if (node[key])
             return node[key].as<T>();
+        node[key] = def;
         return def;
     }
 
     // Overload for std::string
-    std::string getOrDefault(const YAML::Node& node, const std::string& key, const std::string& def) {
+    std::string getOrDefault( YAML::Node& node, const std::string& key, const std::string& def) {
         if (node[key])
             return node[key].as<std::string>();
+        node[key] = def;
         return def;
     }
 
@@ -61,7 +63,11 @@ public:
 
   static uint64_t ParseSizeToBytes(const std::string& sizeStr);
 
+  const std::string Dump(){
+    return YAML::Dump(root);
+  }
+
   private:
     std::string fileName;
-
+    YAML::Node root;
 };

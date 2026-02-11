@@ -2,7 +2,6 @@
 
 
 #include "FEMDAQ.h"
-#include "SignalEvent.h"
 
 class FEMDAQARCFEM : public FEMDAQ {
 public:

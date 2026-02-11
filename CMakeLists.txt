@@ -11,7 +11,7 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH}
   ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
 find_package(Threads REQUIRED)
-find_package(ROOT REQUIRED COMPONENTS Core RIO Tree ROOTNTuple)
+find_package(ROOT REQUIRED COMPONENTS Core RIO Tree)
 find_package(yaml-cpp REQUIRED)
 find_package(Readline REQUIRED)
 

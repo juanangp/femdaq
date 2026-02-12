@@ -128,7 +128,7 @@ cout<<"Entries "<<entries<<endl;
 int eventID;
 double timestamp = 0;
 std::vector<int>* signalsID = nullptr; 
-std::vector<std::vector<short>>* pulses = nullptr;
+std::vector<short>* pulses = nullptr;
 
 chain->SetBranchAddress("eventID", &eventID);
 chain->SetBranchAddress("timestamp", &timestamp);
@@ -156,7 +156,9 @@ chain->SetBranchAddress("pulses", &pulses);
           const int channel = signalID%72;
           double amplitude=0, area=0;
           int maxPos=0;
-          auto pulse = pulses->at(s);
+          const size_t offset = s * 512;
+          std::vector<short> pulse(pulses->begin() + offset, pulses->begin() + offset + 512);
+          std::string hName = "Hist_"+std::to_string(signalID);
           GetParamsFromPulse(pulse, amplitude, area,maxPos);
 
           if(area==0 || amplitude == 0)continue;

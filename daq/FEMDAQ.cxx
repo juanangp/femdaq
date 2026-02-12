@@ -140,7 +140,7 @@ void FEMDAQ::CloseRootFile( const double endTime){
    ts << std::fixed << std::setprecision(6) << endTime;
    TObjString tsObj(ts.str().c_str());
    tsObj.Write("endTime", TObject::kOverwrite);
-   file->Close();
+   //file->Close();
 }
 
 void FEMDAQ::FillEvent(const double eventTime, double &lastTimeSaved){
@@ -165,7 +165,7 @@ void FEMDAQ::SendCommand(const char* cmd, FEMProxy &FEM, bool wait){
       throw std::runtime_error(error);
     }
 
-   if (runConfig.verboseLevel >= RunConfig::Verbosity::Info )std::cout<<"FEM "<<FEM.femID<<" Command sent "<<cmd<<std::endl;
+   if (runConfig.verboseLevel > RunConfig::Verbosity::Info )std::cout<<"FEM "<<FEM.femID<<" Command sent "<<cmd<<std::endl;
 
    if(wait){
      FEM.cmd_sent++;
@@ -184,11 +184,15 @@ void FEMDAQ::waitForCmd(FEMProxy &FEM, const char* cmd){
       std::this_thread::sleep_for(std::chrono::milliseconds(10));
       condition = (FEM.cmd_sent > FEM.cmd_rcv);
       timeout++;
-    } while ( condition && timeout <20);
+    } while ( condition && timeout <100);
 
   if (runConfig.verboseLevel >= RunConfig::Verbosity::Debug )std::cout<<"Cmd sent "<<FEM.cmd_sent<<" Cmd Received: "<<FEM.cmd_rcv<<std::endl;
 
-  if(timeout>=20)std::cout<<"Cmd timeout "<<cmd<<std::endl;
+  if(timeout>=100){
+     std::cout<<"Cmd timeout "<<cmd<<" Cmd sent "<<FEM.cmd_sent<<" Cmd Received: "<<FEM.cmd_rcv<<std::endl;
+     FEM.cmd_sent--;
+  }
+  
 }
 
 

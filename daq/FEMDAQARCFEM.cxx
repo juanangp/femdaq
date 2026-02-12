@@ -125,8 +125,10 @@ void FEMDAQARCFEM::Receiver( ){
                     packetAPI.DataPacket_Print(&buf_rcv[1], size-1);
                   }
                 } else {
-                  if (runConfig.verboseLevel >= RunConfig::Verbosity::Info){
-                    std::cout<<"INFO PACKET"<<std::endl;
+                  const short errorCode = buf_rcv[2];
+                  if (runConfig.verboseLevel > RunConfig::Verbosity::Info || errorCode ){
+                    if (errorCode)std::cout<<"---------------------ERROR----------------"<<std::endl;
+                    else std::cout<<"DEBUG PACKET REPLY"<<std::endl;
                     packetAPI.DataPacket_Print(&buf_rcv[1], size-1);
                   }
                   //std::cout<<"Frame is neither data or monitoring Val 0x"<<std::hex<<buf_rcv[1]<<std::dec<<std::endl;

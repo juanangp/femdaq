@@ -12,7 +12,7 @@ public:
     int eventID;
     double timestamp = 0;
     std::vector<int> signalsID;
-    std::vector<std::vector<short>> pulses;
+    std::vector<short> pulses;
 
     SignalEvent() = default;
     ~SignalEvent() = default;
@@ -27,7 +27,7 @@ public:
         }
 
       signalsID.emplace_back(sID);
-      pulses.emplace_back(std::move(pulse));
+      pulses.insert(pulses.end(), pulse.begin(), pulse.end());
     }
 
     inline void Clear(){

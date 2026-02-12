@@ -12,7 +12,7 @@ chain->Add(fileName.c_str(), -1);
 int eventID;
 double timestamp = 0;
 std::vector<int>* signalsID = nullptr; 
-std::vector<std::vector<short>>* pulses = nullptr;
+std::vector<short>* pulses = nullptr;
 
 chain->SetBranchAddress("eventID", &eventID);
 chain->SetBranchAddress("timestamp", &timestamp);
@@ -37,8 +37,9 @@ cout<<"Entries "<<entries<<endl;
           const int signalID = signalsID->at(s);
           const int card = signalID/72;
           const int channel = signalID%72;
+          const size_t offset = s * 512;
+          std::vector<short> pulse(pulses->begin() + offset, pulses->begin() + offset + 512);
           std::string hName = "Hist_"+std::to_string(signalID);
-          auto &pulse = pulses->at(s);
           auto histo = new TH1S (hName.c_str(),hName.c_str(),pulse.size(),0.,pulse.size());
             for(int p=0;p<pulse.size();p++){
               //cout<<p<<" "<<pulse[p]<<std::endl;

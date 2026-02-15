@@ -32,6 +32,8 @@ public:
   std::vector<FEM> fems;
   bool readOnly = false;
 
+  std::map<std::string, std::string> runInfo;
+
   uint64_t fileSize = 1024ull * 1024ull * 1024ull;
 
   Verbosity verboseLevel;
@@ -52,6 +54,12 @@ public:
         node[key] = def;
         return def;
     }
+
+  void addRunInfoField(const std::string& key, std::string &value) {
+    runInfo[key] = value;
+  }
+
+  void UpdateInfo( );
 
   RunConfig () = default;
   RunConfig(const std::string& fN);

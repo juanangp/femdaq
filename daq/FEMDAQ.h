@@ -41,6 +41,7 @@ class FEMDAQ {
     void OpenRootFile(const std::string &fileName, SignalEvent &sEvent, const double startTime);
     void CloseRootFile(const double endTime);
     void FillEvent(const double eventTime, double &lastTimeSaved);
+    void UpdateRunConfigInfo( ){ runConfig.UpdateInfo();}
 
     static inline double lastEvTime = 0;
     static double getCurrentTime();

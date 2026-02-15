@@ -43,6 +43,7 @@ void CommandFetcher::handleCommand(const std::string& line) {
        return;
     } else if (cmd == "startDAQ") {
        //Start acquisiton loop
+       daq->UpdateRunConfigInfo( );
        daq->startDAQ( );
     } else if (cmd == "stopDAQ") {
        //Start acquisiton loop

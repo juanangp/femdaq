@@ -71,6 +71,50 @@ void RunConfig::loadConfig() {
         std::cout << "ERROR: No FEM entries found in configuration"<<std::endl;
     }
 
+    if (run["Info"]) {
+         auto infoSection = run["Info"];
+         for (auto it = infoSection.begin(); it != infoSection.end(); ++it) {
+             std::string key = it->first.as<std::string>();
+             std::string value = it->second.as<std::string>();
+             addRunInfoField(key, value);
+         }
+     }
+
+}
+
+void RunConfig::UpdateInfo( ){
+
+
+  std::cout << "\n--- Run Info ---" << std::endl;
+  std::cout << "Press [ENTER] to keep the default value or type a new one." << std::endl;
+
+  std::string input;
+
+  std::cout<< ">>>> Run Tag ("<< tag <<"): ";
+  std::getline(std::cin, input);
+    if (!input.empty()) {
+      tag = input;
+      root["run"]["tag"] = tag;
+    }
+
+  std::cout<< ">>>> Run Type ("<< type <<"): ";
+  std::getline(std::cin, input);
+    if (!input.empty()) {
+      type = input;
+      root["run"]["type"] = type;
+    }
+
+      for (auto& [field, value] : runInfo) {
+          std::cout << " >>>> " << field << " (" << value << "): ";
+          std::getline(std::cin, input);
+          // If the user typed something, update the value. 
+          // If they just pressed Enter, input will be empty.
+            if (!input.empty()) {
+              value = input;
+              root["run"]["Info"][field] = value;
+            }
+      }
+  std::cout << "--- Run Info updated successfully ---\n" << std::endl;
 }
 
 uint64_t RunConfig::ParseSizeToBytes(const std::string& sizeStr) {

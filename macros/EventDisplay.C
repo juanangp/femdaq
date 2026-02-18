@@ -20,6 +20,7 @@
 #include <TObjString.h>
 #include <TObjArray.h>
 #include <TApplication.h>
+#include <TString.h>
 #include <vector>
 #include <map>
 #include <fstream>
@@ -381,17 +382,77 @@ public:
     void ToggleAuto() { if(!fIsRunning) { fIsRunning = true; fTimer->Start(100, kFALSE); fWatchdogTimer->Start(30000, kFALSE); ((TGTextButton*)gTQSender)->SetText("Stop Monitor"); } else { fIsRunning = false; fTimer->Stop(); fWatchdogTimer->Stop(); ((TGTextButton*)gTQSender)->SetText("&DAQ Live Mode"); } }
     
     void CheckForNewData() {
-        if (!fChain || !fIsRunning || fCheckNextRun->GetState() != kButtonDown) return;
-        fChain->GetEntries(); 
-        TString nextSub = fBaseFileName; nextSub.ReplaceAll(Form("_%03d.root", fCurrentSubrun), Form("_%03d.root", fCurrentSubrun + 1));
-        if (!gSystem->AccessPathName(nextSub)) { LoadDataFile(nextSub.Data()); return; }
-        TString nextRun = fBaseFileName; nextRun.ReplaceAll(Form("Run%05d", fCurrentRun), Form("Run%05d", fCurrentRun + 1));
-        nextRun.ReplaceAll(Form("_%03d.root", fCurrentSubrun), "_001.root");
-        if (!gSystem->AccessPathName(nextRun)) { ManualReset(); LoadDataFile(nextRun.Data()); }
+    if (!fChain || !fIsRunning || fCheckNextRun->GetState() != kButtonDown) return;
+
+    // 1. Refresh current entries
+    fChain->GetEntries(); 
+
+    // 2. Extract directory and build search patterns
+    TString dirName = gSystem->DirName(fBaseFileName);
+    void *dir = gSystem->OpenDirectory(dirName);
+    if (!dir) return;
+
+    TString nextSubrunPattern; 
+    nextSubrunPattern.Form("Run%05d_.*_%03d.root", fCurrentRun, fCurrentSubrun + 1);
+    
+    TString nextRunPattern;
+    nextRunPattern.Form("Run%05d_.*_001.root", fCurrentRun + 1);
+
+    const char *entry;
+    TString foundNextSubrun = "";
+    TString foundNextRun = "";
+
+    // 3. Scan directory for matches
+    TPRegexp reSub(nextSubrunPattern);
+    TPRegexp reRun(nextRunPattern);
+
+    while ((entry = gSystem->GetDirEntry(dir))) {
+        TString fileName = entry;
+        
+        // TPRegexp::Match returns the number of matches found
+        if (reSub.Match(fileName) > 0) {
+            foundNextSubrun = dirName + "/" + fileName;
+            break; // Subrun takes priority
+        }
+        if (reRun.Match(fileName) > 0) {
+            foundNextRun = dirName + "/" + fileName;
+        }
     }
 
+    gSystem->FreeDirectory(dir);
+
+    // 4. Load found files
+    if (foundNextSubrun != "") {
+        std::cout << ">>> New Subrun found: " << foundNextSubrun << std::endl;
+        fCurrentSubrun++;
+        fBaseFileName = foundNextSubrun;
+        fChain->Add(fBaseFileName);
+        fDataPathEntry->SetText(gSystem->BaseName(fBaseFileName));
+    } 
+    else if (foundNextRun != "") {
+        std::cout << ">>> New Run detected: " << foundNextRun << std::endl;
+        ManualReset(); // Reset histograms for new main Run
+        fCurrentRun++;
+        fCurrentSubrun = 1;
+        fBaseFileName = foundNextRun;
+        fChain->Add(fBaseFileName);
+        fDataPathEntry->SetText(gSystem->BaseName(fBaseFileName));
+    }
+}
+
+
     void ClearEvent() { if(fStacks) { delete fStacks; fStacks = nullptr; } for(auto h : fHistos) delete h; fHistos.clear(); }
-    void ParseRunSubrun(TString fn, int &r, int &s) { TObjArray *sa = TPRegexp("^Run(\\d+).*_(\\d+)\\.root$").MatchS(gSystem->BaseName(fn)); if(sa && sa->GetEntries()>2) { r=((TObjString*)sa->At(1))->GetString().Atoi(); s=((TObjString*)sa->At(2))->GetString().Atoi(); } if(sa) delete sa; }
+
+    void ParseRunSubrun(TString fn, int &r, int &s) {
+    // Matches "Run" + digits + anything + "_" + digits + ".root"
+    TObjArray *sa = TPRegexp("Run(\\d+).+_(\\d+)\\.root$").MatchS(gSystem->BaseName(fn));
+    if (sa && sa->GetEntries() > 2) {
+        r = ((TObjString*)sa->At(1))->GetString().Atoi();
+        s = ((TObjString*)sa->At(2))->GetString().Atoi();
+    }
+    if (sa) delete sa;
+}
+
     std::map<int,int> readDecoding(std::string f) { std::map<int,int> m; std::ifstream i(f); int s,p; while(i>>s>>p) m[s]=p; return m; }
     virtual ~DAQGUI() { ClearEvent(); if(fChain) delete fChain; if(fTimer) delete fTimer; if(fWatchdogTimer) delete fWatchdogTimer; }
     ClassDef(DAQGUI, 0)

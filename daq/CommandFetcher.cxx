@@ -41,12 +41,14 @@ void CommandFetcher::handleCommand(const std::string& line) {
     } else if (cmd == "fem" && !args.empty()) {
        daq->setActiveFEM(args[0]);
        return;
+    } else if (cmd == "writeMetadata") {
+       //Write Metadata
+       if(!daq->isReadOnly())daq->UpdateRunConfigInfo( );
     } else if (cmd == "startDAQ") {
        //Start acquisiton loop
-       if(!daq->isReadOnly())daq->UpdateRunConfigInfo( );
        daq->startDAQ( );
     } else if (cmd == "stopDAQ") {
-       //Start acquisiton loop
+       //Stop acquisiton loop
        daq->stopDAQ( );
     } else if (cmd == "sleep") {
         int sleepTime = 1;
@@ -56,7 +58,7 @@ void CommandFetcher::handleCommand(const std::string& line) {
         } else {
         std::cout<<"Cannot decode sleep time "<<args[0]<<std::endl;
         }
-    }else {
+    } else {
       //Send cmd to to DAQ
       daq->SendCommand(line.c_str());
     }

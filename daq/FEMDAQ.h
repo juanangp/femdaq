@@ -20,7 +20,7 @@ class FEMDAQ {
     
     void SendCommand(const char* cmd, FEMProxy &FEM, bool wait);
     void SendCommand(const char* cmd, bool wait = true);
-    void waitForCmd(FEMProxy &FEM, const char* cmd);
+    void waitForCmd(FEMProxy &FEM);
 
     void setActiveFEM(const std::string &FEMID);
 

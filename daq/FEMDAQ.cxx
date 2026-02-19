@@ -108,6 +108,7 @@ void FEMDAQ::SendCommand(const char* cmd, bool wait){
 
 void FEMDAQ::OpenRootFile(const std::string &fileName, SignalEvent &sEvent, const double startTime){
 
+  //if(file)file->Close();
   file.reset();
   event_tree.reset();
 
@@ -157,6 +158,9 @@ double elapsed = eventTime - lastTimeSaved;
 
 void FEMDAQ::SendCommand(const char* cmd, FEMProxy &FEM, bool wait){
 
+
+  if (std::strncmp(cmd, "daq", 3) == 0)wait = false;
+
   FEM.mutex_socket.lock();
   const int e = sendto (FEM.client, cmd, strlen(cmd), 0, (struct sockaddr*)&(FEM.target), sizeof(struct sockaddr));
   FEM.mutex_socket.unlock();
@@ -169,13 +173,13 @@ void FEMDAQ::SendCommand(const char* cmd, FEMProxy &FEM, bool wait){
 
    if(wait){
      FEM.cmd_sent++;
-     waitForCmd(FEM, cmd);
+     waitForCmd(FEM);
    }
 
 
 }
 
-void FEMDAQ::waitForCmd(FEMProxy &FEM, const char* cmd){
+void FEMDAQ::waitForCmd(FEMProxy &FEM){
 
   int timeout = 0;
   bool condition = false;
@@ -184,12 +188,12 @@ void FEMDAQ::waitForCmd(FEMProxy &FEM, const char* cmd){
       std::this_thread::sleep_for(std::chrono::milliseconds(10));
       condition = (FEM.cmd_sent > FEM.cmd_rcv);
       timeout++;
-    } while ( condition && timeout <100);
+    } while ( condition && timeout <500);
 
   if (runConfig.verboseLevel >= RunConfig::Verbosity::Debug )std::cout<<"Cmd sent "<<FEM.cmd_sent<<" Cmd Received: "<<FEM.cmd_rcv<<std::endl;
 
-  if(timeout>=100){
-     std::cout<<"Cmd timeout "<<cmd<<" Cmd sent "<<FEM.cmd_sent<<" Cmd Received: "<<FEM.cmd_rcv<<std::endl;
+  if(timeout>=500){
+     std::cout<<"Command timeout "<<timeout<<" Cmd sent "<<FEM.cmd_sent<<" Cmd Received: "<<FEM.cmd_rcv<<std::endl;
      FEM.cmd_sent--;
   }
   

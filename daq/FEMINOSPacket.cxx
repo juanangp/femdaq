@@ -318,6 +318,8 @@ if(buffer.empty())return false;
         break;
       } else if ( (w & PFX_0_BIT_CONTENT_MASK) == PFX_END_OF_FRAME ){
         idx++;
+      } else if ( w  == PFX_NULL_CONTENT ){
+        idx++;
       } else {
         printf("TryExtractNextEvent WARNING: word : 0x%x (%d) unknown data at %d \n", w, w, idx);
         idx++;
@@ -382,12 +384,11 @@ void ParseEventFromWords(std::deque<uint16_t> &event, SignalEvent &sEvent, uint6
     } else if ((w & PFX_12_BIT_CONTENT_MASK) == PFX_CHIP_LAST_CELL_READ) {
       idx++;
     } else if ((w & PFX_14_BIT_CONTENT_MASK) == PFX_CARD_CHIP_CHAN_HIT_IX ) {
-      idx++;
       uint16_t cardID = GET_CARD_IX(event[idx]);
       uint16_t chipID = GET_CHIP_IX(event[idx]);
       uint16_t chID = GET_CHAN_IX(event[idx]);
       int physChannel = chID + chipID*72 + cardID*288;
-      //std::cout<<" Card "<<cardID<<" Chip "<<chipID<<" Channel "<<chID<<" PhysChann "<<physChannel<<std::endl;
+      //std::cout<<std::hex<<"0x"<<event[idx]<<std::dec<<" Card "<<cardID<<" Chip "<<chipID<<" Channel "<<chID<<" PhysChann "<<physChannel<<std::endl;
       idx++;
       int timeBin=0;
       std::vector<short> sData(512,0);
@@ -415,6 +416,9 @@ void ParseEventFromWords(std::deque<uint16_t> &event, SignalEvent &sEvent, uint6
       return;
     } else if ( (w & PFX_0_BIT_CONTENT_MASK) == PFX_END_OF_FRAME ){
       //std::cout<<" END OF FRAME "<<std::endl;
+      idx++;
+    } else if ( w  == PFX_NULL_CONTENT ){
+      //NULL word, skipping
       idx++;
     } else {
       printf("WARNING: event %d word : 0x%x (%d) unknown data\n", ev_count, w, w);

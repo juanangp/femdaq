@@ -35,7 +35,7 @@ cout<<"Entries "<<entries<<endl;
 
         for (size_t s = 0; s<signalsID->size();s++){
           const int signalID = signalsID->at(s);
-          const int card = signalID/72;
+          const int card = (signalID % 288) / 72;
           const int channel = signalID%72;
           const size_t offset = s * 512;
           std::vector<short> pulse(pulses->begin() + offset, pulses->begin() + offset + 512);

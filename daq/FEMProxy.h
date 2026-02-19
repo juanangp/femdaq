@@ -6,27 +6,47 @@
 #include "FEMSocket.h"
 
 class FEMProxy : public FEMSocket {
-  
-  public:
+public:
     FEMProxy() = default;
     ~FEMProxy() = default;
 
-    // Inherits: copy deleted, move allowed
     FEMProxy(const FEMProxy&) = delete;
     FEMProxy& operator=(const FEMProxy&) = delete;
 
-    FEMProxy(FEMProxy&&) = default;
-    FEMProxy& operator=(FEMProxy&&) = default;
-    
-    bool pendingEvent=true;
+    FEMProxy(FEMProxy&& other) noexcept : FEMSocket(std::move(other)) {
+        pendingEvent = other.pendingEvent;
+        active = other.active;
+        femID = other.femID;
+        bufferIndex = other.bufferIndex;
+        buffer = std::move(other.buffer);
+        cmd_sent.store(other.cmd_sent.load());
+        cmd_rcv.store(other.cmd_rcv.load());
+    }
+
+    FEMProxy& operator=(FEMProxy&& other) noexcept {
+        if (this != &other) {
+            FEMSocket::operator=(std::move(other));
+            pendingEvent = other.pendingEvent;
+            active = other.active;
+            femID = other.femID;
+            bufferIndex = other.bufferIndex;
+            buffer = std::move(other.buffer);
+            
+            cmd_sent.store(other.cmd_sent.load());
+            cmd_rcv.store(other.cmd_rcv.load());
+        }
+        return *this;
+    }
+
+    bool pendingEvent = true;
     bool active = true;
 
-    int cmd_sent=0;
-    int cmd_rcv=0;
+    std::atomic<uint32_t> cmd_sent{0};
+    std::atomic<uint32_t> cmd_rcv{0};
     int femID = 0;
-    size_t bufferIndex=0;
+    size_t bufferIndex = 0;
 
-    std::deque <uint16_t> buffer;
+    std::deque<uint16_t> buffer;
 
     inline static std::mutex mutex_socket;
     inline static std::mutex mutex_mem;

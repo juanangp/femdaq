@@ -236,7 +236,7 @@ void FEMDAQARCFEM::EventBuilder( ){
 
       if (FEMDAQ::stopEventBuilder){
          for (auto &FEM : FEMArray)
-           std::cout<<"Buffer size "<<FEM.buffer.size()<<std::endl;
+           if(tC%100==0)std::cout<<"Buffer size "<<FEM.buffer.size()<<std::endl;
          tC++;
          if(tC>=5000)break;
       }

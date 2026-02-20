@@ -2,6 +2,7 @@
 #include "RunConfig.h"
 
 #include <charconv>
+#include <fstream>
 
 RunConfig::RunConfig(const std::string& fN) : fileName(fN)  {
 
@@ -114,6 +115,13 @@ void RunConfig::UpdateInfo( ){
               root["run"]["Info"][field] = value;
             }
       }
+
+  std::ofstream fout(fileName);
+    if (fout.is_open()) {
+      fout << root; 
+      fout.close();
+    }
+
   std::cout << "--- Run Info updated successfully ---\n" << std::endl;
 }
 

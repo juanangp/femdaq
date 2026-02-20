@@ -85,6 +85,7 @@ public:
         fRateGraph->SetMarkerStyle(20);
         fRateGraph->SetMarkerSize(0.6);
         fRateGraph->SetLineColor(kAzure+1);
+        fRateGraph->GetXaxis()->SetTimeDisplay(1);
 
         fTimer = new TTimer();
         fTimer->Connect("Timeout()", "DAQGUI", this, "NextEvent()");
@@ -428,6 +429,8 @@ public:
         fBaseFileName = foundNextSubrun;
         fChain->Add(fBaseFileName);
         fDataPathEntry->SetText(gSystem->BaseName(fBaseFileName));
+        fDataPathEntry->SetToolTipText(fBaseFileName);
+        
     } 
     else if (foundNextRun != "") {
         std::cout << ">>> New Run detected: " << foundNextRun << std::endl;
@@ -437,6 +440,7 @@ public:
         fBaseFileName = foundNextRun;
         fChain->Add(fBaseFileName);
         fDataPathEntry->SetText(gSystem->BaseName(fBaseFileName));
+        fDataPathEntry->SetToolTipText(fBaseFileName);
     }
 }
 

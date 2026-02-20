@@ -33,15 +33,15 @@ class FEMDAQ {
     static std::atomic<bool> stopEventBuilder;
     std::atomic<uint32_t> storedEvents{0};
 
-    uint32_t ev_count=0;
-
     std::unique_ptr<TFile> file = nullptr;
     std::unique_ptr<TTree> event_tree = nullptr;
 
     void OpenRootFile(const std::string &fileName, SignalEvent &sEvent, const double startTime);
     void CloseRootFile(const double endTime);
     void FillEvent(const double eventTime, double &lastTimeSaved);
+    void UpdateRate(const double eventTime, double &prevEventTime, uint32_t &prevEvCount);
     void UpdateRunConfigInfo( ){ runConfig.UpdateInfo();}
+
     bool isReadOnly( ) const {return runConfig.readOnly;}
 
     static inline double lastEvTime = 0;

@@ -108,7 +108,6 @@ void FEMDAQ::SendCommand(const char* cmd, bool wait){
 
 void FEMDAQ::OpenRootFile(const std::string &fileName, SignalEvent &sEvent, const double startTime){
 
-  //if(file)file->Close();
   file.reset();
   event_tree.reset();
 
@@ -135,25 +134,51 @@ void FEMDAQ::OpenRootFile(const std::string &fileName, SignalEvent &sEvent, cons
 
 void FEMDAQ::CloseRootFile( const double endTime){
 
+   if (!file || !file->IsOpen()) return;
+
    file->cd();
-   event_tree->Write(nullptr, TObject::kOverwrite);
+
    std::ostringstream ts;
    ts << std::fixed << std::setprecision(6) << endTime;
    TObjString tsObj(ts.str().c_str());
    tsObj.Write("endTime", TObject::kOverwrite);
-   //file->Close();
+   
+   if (event_tree) {
+      event_tree->Write(nullptr, TObject::kOverwrite);
+   }
+
+   file->Write(); 
+    
+    event_tree.reset(); 
+    file.reset(); 
 }
 
 void FEMDAQ::FillEvent(const double eventTime, double &lastTimeSaved){
 
 event_tree->Fill();
-double elapsed = eventTime - lastTimeSaved;
+const double elapsed = eventTime - lastTimeSaved;
 
   if(storedEvents%1000==0 || elapsed >100 ){
     event_tree->AutoSave("SaveSelf");
     lastTimeSaved = eventTime;
   }
   
+}
+
+void FEMDAQ::UpdateRate(const double eventTime, double &prevEventTime, uint32_t &prevEvCount){
+
+const double elapsed = eventTime - prevEventTime;
+if (elapsed < 10)return;
+
+  char tmpstm[20]; //"YYYY-MM-DD HH:MM:SS" + \0
+  std::time_t currentEvTime = static_cast<std::time_t>(eventTime);
+
+  std::strftime(tmpstm, sizeof(tmpstm), "%Y-%m-%d %H:%M:%S", std::localtime(&currentEvTime));
+    
+  std::cout<<tmpstm<<" Total events: "<<storedEvents<<" Rate: "<<(storedEvents - prevEvCount)/elapsed<<" Hz"<<std::endl;
+  prevEvCount = storedEvents;
+  prevEventTime = eventTime;
+
 }
 
 void FEMDAQ::SendCommand(const char* cmd, FEMProxy &FEM, bool wait){

@@ -102,7 +102,7 @@ void FEMDAQARCFEM::Receiver( ){
                 if(packetAPI.isDataFrame(&buf_rcv[1])) {
                   //const std::deque<uint16_t> frame (&buf_rcv[1], &buf_rcv[size -1]);
                   FEM.mutex_mem.lock();
-                  FEM.buffer.insert(FEM.buffer.end(), &buf_rcv[1], &buf_rcv[size]);
+                  FEM.buffer.insert(FEM.buffer.end(), &buf_rcv[1], &buf_rcv[size-1]);
                   const size_t bufferSize = FEM.buffer.size();
                   FEM.mutex_mem.unlock();
                     if (runConfig.verboseLevel >= RunConfig::Verbosity::Debug){
@@ -164,9 +164,12 @@ void FEMDAQARCFEM::EventBuilder( ){
   SignalEvent sEvent;
   const double startTime = FEMDAQ::getCurrentTime();
   double lastTimeSaved = startTime;
+  uint32_t prevEvCount = 0;
+  double prevEventTime = startTime;
   uint32_t ev_count = 0;
   uint64_t ts = 0;
   uint64_t fileSize =0;
+  
 
   int fileIndex = 1;
   const std::string baseName = MakeBaseFileName();
@@ -202,12 +205,12 @@ void FEMDAQARCFEM::EventBuilder( ){
       if(newEvent){//Save Event if closed
         sEvent.eventID = ev_count;
         sEvent.timestamp =  (double) ts * 2E-8 + startTime;
+        UpdateRate(sEvent.timestamp, prevEventTime, prevEvCount);
 
         if (file){
             FillEvent(sEvent.timestamp, lastTimeSaved);
            
            if(storedEvents%100 == 0){
-             std::cout<<"Events "<<ev_count<<" stored " <<storedEvents + 1 <<std::endl;
              //std::cout<<"File size "<<std::filesystem::file_size(fileName)<<" "<<runConfig.fileSize<<std::endl;
              fileSize = std::filesystem::file_size(fileName);
            }

@@ -230,16 +230,18 @@ void FEMDAQARCFEM::EventBuilder( ){
              OpenRootFile(fileName, sEvent, FEMDAQ::getCurrentTime());
            }
 
-          for (auto &FEM : FEMArray)FEM.pendingEvent = true;
-
         }
+        for (auto &FEM : FEMArray)FEM.pendingEvent = true;
+
         ++FEMDAQ::storedEvents;
         sEvent.Clear();
       }
 
       if (FEMDAQ::stopEventBuilder){
          for (auto &FEM : FEMArray)
-           if(tC%100==0)std::cout<<"Buffer size "<<FEM.buffer.size()<<std::endl;
+           if(tC%1000==0){
+             std::cout<<"Buffer size "<<FEM.buffer.size()<<std::endl;
+           }
          tC++;
          if(tC>=5000)break;
       }

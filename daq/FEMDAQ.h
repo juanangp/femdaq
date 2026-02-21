@@ -18,19 +18,13 @@ class FEMDAQ {
 
     virtual ~FEMDAQ() = default;
     
-    void SendCommand(const char* cmd, FEMProxy &FEM, bool wait);
-    void SendCommand(const char* cmd, bool wait = true);
-    void waitForCmd(FEMProxy &FEM);
-
     void setActiveFEM(const std::string &FEMID);
 
-    virtual void startDAQ( ) = 0;
+    virtual void startDAQ( const std::string &flags = "" ) = 0;
     virtual void stopDAQ( ) = 0;
-    virtual void Receiver( ) = 0;
+    virtual void SendCommand(const char* cmd, bool wait = true) = 0;
 
     static std::atomic<bool> abrt;
-    static std::atomic<bool> stopReceiver;
-    static std::atomic<bool> stopEventBuilder;
     std::atomic<uint32_t> storedEvents{0};
 
     std::unique_ptr<TFile> file = nullptr;
@@ -38,7 +32,7 @@ class FEMDAQ {
 
     void OpenRootFile(const std::string &fileName, SignalEvent &sEvent, const double startTime);
     void CloseRootFile(const double endTime);
-    void FillEvent(const double eventTime, double &lastTimeSaved);
+    void FillTree(const double eventTime, double &lastTimeSaved);
     void UpdateRate(const double eventTime, double &prevEventTime, uint32_t &prevEvCount);
     void UpdateRunConfigInfo( ){ runConfig.UpdateInfo();}
 

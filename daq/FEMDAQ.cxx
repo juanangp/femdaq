@@ -9,8 +9,6 @@
 #include <TObjString.h>
 
 std::atomic<bool> FEMDAQ::abrt(false);
-std::atomic<bool> FEMDAQ::stopReceiver(false);
-std::atomic<bool> FEMDAQ::stopEventBuilder(false);
 
 FEMDAQ::FEMDAQ(RunConfig& rC) : runConfig(rC) {
 
@@ -97,14 +95,6 @@ void FEMDAQ::setActiveFEM(const std::string &FEMID){
 
 }
 
-void FEMDAQ::SendCommand(const char* cmd, bool wait){
-
-  for (auto &FEM : FEMArray){
-    if(FEM.active)
-      SendCommand(cmd, FEM, wait);
-  }
-
-}
 
 void FEMDAQ::OpenRootFile(const std::string &fileName, SignalEvent &sEvent, const double startTime){
 
@@ -153,7 +143,7 @@ void FEMDAQ::CloseRootFile( const double endTime){
     file.reset(); 
 }
 
-void FEMDAQ::FillEvent(const double eventTime, double &lastTimeSaved){
+void FEMDAQ::FillTree(const double eventTime, double &lastTimeSaved){
 
 event_tree->Fill();
 const double elapsed = eventTime - lastTimeSaved;
@@ -180,48 +170,4 @@ if (elapsed < 10)return;
   prevEventTime = eventTime;
 
 }
-
-void FEMDAQ::SendCommand(const char* cmd, FEMProxy &FEM, bool wait){
-
-
-  if (std::strncmp(cmd, "daq", 3) == 0)wait = false;
-
-  FEM.mutex_socket.lock();
-  const int e = sendto (FEM.client, cmd, strlen(cmd), 0, (struct sockaddr*)&(FEM.target), sizeof(struct sockaddr));
-  FEM.mutex_socket.unlock();
-    if ( e == -1) {
-      std::string error ="sendto failed: " + std::string(strerror(errno));
-      throw std::runtime_error(error);
-    }
-
-   if (runConfig.verboseLevel > RunConfig::Verbosity::Info )std::cout<<"FEM "<<FEM.femID<<" Command sent "<<cmd<<std::endl;
-
-   if(wait){
-     FEM.cmd_sent++;
-     waitForCmd(FEM);
-   }
-
-
-}
-
-void FEMDAQ::waitForCmd(FEMProxy &FEM){
-
-  int timeout = 0;
-  bool condition = false;
-
-    do {
-      std::this_thread::sleep_for(std::chrono::milliseconds(10));
-      condition = (FEM.cmd_sent > FEM.cmd_rcv);
-      timeout++;
-    } while ( condition && timeout <500);
-
-  if (runConfig.verboseLevel >= RunConfig::Verbosity::Debug )std::cout<<"Cmd sent "<<FEM.cmd_sent<<" Cmd Received: "<<FEM.cmd_rcv<<std::endl;
-
-  if(timeout>=500){
-     std::cout<<"Command timeout "<<timeout<<" Cmd sent "<<FEM.cmd_sent<<" Cmd Received: "<<FEM.cmd_rcv<<std::endl;
-     FEM.cmd_sent--;
-  }
-  
-}
-
 

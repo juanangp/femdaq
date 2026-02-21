@@ -16,16 +16,22 @@ public:
 
   PacketAPI packetAPI;
 
+  static std::atomic<bool> stopReceiver;
+  static std::atomic<bool> stopEventBuilder;
+
   std::thread receiveThread, eventBuilderThread;
 
   explicit FEMDAQARCFEM(RunConfig& rC);
   ~FEMDAQARCFEM( );
   
-  virtual void Receiver( ) override;
-  virtual void startDAQ( ) override;
+  virtual void startDAQ( const std::string &flags ="" ) override;
   virtual void stopDAQ( ) override;
-
+  virtual void SendCommand(const char* cmd, bool wait = true) override;
+  
+  void Receiver( );
   void EventBuilder( );
+  void SendCommand(const char* cmd, FEMProxy &FEM, bool wait);
+  void waitForCmd(FEMProxy &FEM);
 
 private:
     struct Registrar {

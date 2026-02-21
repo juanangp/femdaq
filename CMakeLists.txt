@@ -31,6 +31,7 @@ file(
     daq/RunConfig.cxx
     daq/FEMDAQ.cxx
     daq/FEMDAQARCFEM.cxx
+    daq/FEMDAQDCC.cxx
     daq/DCCPacket.cxx
     daq/FEMINOSPacket.cxx
     daq/ARCPacket.cxx)

@@ -5,6 +5,9 @@
 
 #include <filesystem>
 
+std::atomic<bool> FEMDAQARCFEM::stopReceiver(false);
+std::atomic<bool> FEMDAQARCFEM::stopEventBuilder(false);
+
 FEMDAQARCFEM::Registrar::Registrar() {
     FEMDAQ::RegisterType("ARC",
         [](RunConfig& cfg){ return std::make_unique<FEMDAQARCFEM>(cfg); });
@@ -39,11 +42,65 @@ FEMDAQARCFEM::FEMDAQARCFEM(RunConfig& rC) : FEMDAQ (rC){
 
 FEMDAQARCFEM::~FEMDAQARCFEM( ){
 
-  FEMDAQ::stopReceiver = true;
+  stopReceiver = true;
   if (receiveThread.joinable())
         receiveThread.join();
 
 }
+
+void FEMDAQARCFEM::SendCommand(const char* cmd, bool wait){
+
+  for (auto &FEM : FEMArray){
+    if(FEM.active)
+      SendCommand(cmd, FEM, wait);
+  }
+
+}
+
+void FEMDAQARCFEM::SendCommand(const char* cmd, FEMProxy &FEM, bool wait){
+
+
+  if (std::strncmp(cmd, "daq", 3) == 0)wait = false;
+
+  FEM.mutex_socket.lock();
+  const int e = sendto (FEM.client, cmd, strlen(cmd), 0, (struct sockaddr*)&(FEM.target), sizeof(struct sockaddr));
+  FEM.mutex_socket.unlock();
+    if ( e == -1) {
+      std::string error ="sendto failed: " + std::string(strerror(errno));
+      throw std::runtime_error(error);
+    }
+
+   if (runConfig.verboseLevel > RunConfig::Verbosity::Info )std::cout<<"FEM "<<FEM.femID<<" Command sent "<<cmd<<std::endl;
+
+   if(wait){
+     FEM.cmd_sent++;
+     waitForCmd(FEM);
+   }
+
+
+}
+
+void FEMDAQARCFEM::waitForCmd(FEMProxy &FEM){
+
+  int timeout = 0;
+  bool condition = false;
+
+    do {
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+      condition = (FEM.cmd_sent > FEM.cmd_rcv);
+      timeout++;
+    } while ( condition && timeout <500);
+
+  if (runConfig.verboseLevel >= RunConfig::Verbosity::Debug )std::cout<<"Cmd sent "<<FEM.cmd_sent<<" Cmd Received: "<<FEM.cmd_rcv<<std::endl;
+
+  if(timeout>=500){
+     std::cout<<"Command timeout "<<timeout<<" Cmd sent "<<FEM.cmd_sent<<" Cmd Received: "<<FEM.cmd_rcv<<std::endl;
+     FEM.cmd_sent--;
+  }
+  
+}
+
+
 
 void FEMDAQARCFEM::Receiver( ){
 
@@ -65,7 +122,7 @@ void FEMDAQARCFEM::Receiver( ){
     }
   smax++;
   int err=0;
-    while (!FEMDAQ::stopReceiver){
+    while (!stopReceiver){
 
       // Copy the read fds from what we computed outside of the loop
       readfds_work = readfds;
@@ -141,9 +198,9 @@ void FEMDAQARCFEM::Receiver( ){
 
 }
 
-void FEMDAQARCFEM::startDAQ( ){
+void FEMDAQARCFEM::startDAQ( const std::string &flags ){
 
-  FEMDAQ::stopEventBuilder = false;
+  stopEventBuilder = false;
   FEMDAQ::storedEvents = 0;
   eventBuilderThread = std::thread( &FEMDAQARCFEM::EventBuilder, this);
     while (!FEMDAQ::abrt && (runConfig.nEvents == 0 || FEMDAQ::storedEvents.load() < runConfig.nEvents) ){
@@ -153,7 +210,7 @@ void FEMDAQARCFEM::startDAQ( ){
 
 void FEMDAQARCFEM::stopDAQ( ){
 
-  FEMDAQ::stopEventBuilder = true;
+  stopEventBuilder = true;
   if (eventBuilderThread.joinable())
         eventBuilderThread.join();
 
@@ -183,7 +240,7 @@ void FEMDAQARCFEM::EventBuilder( ){
   bool emptyBuffer = true;
   int tC =0;
 
-  while(!(emptyBuffer && FEMDAQ::stopEventBuilder)) {
+  while(!(emptyBuffer && stopEventBuilder)) {
     emptyBuffer=true;
     newEvent = true;
 
@@ -208,7 +265,7 @@ void FEMDAQARCFEM::EventBuilder( ){
         UpdateRate(sEvent.timestamp, prevEventTime, prevEvCount);
 
         if (file){
-            FillEvent(sEvent.timestamp, lastTimeSaved);
+            FillTree(sEvent.timestamp, lastTimeSaved);
            
            if(storedEvents%100 == 0){
              //std::cout<<"File size "<<std::filesystem::file_size(fileName)<<" "<<runConfig.fileSize<<std::endl;
@@ -231,13 +288,14 @@ void FEMDAQARCFEM::EventBuilder( ){
            }
 
         }
+
         for (auto &FEM : FEMArray)FEM.pendingEvent = true;
 
         ++FEMDAQ::storedEvents;
         sEvent.Clear();
       }
 
-      if (FEMDAQ::stopEventBuilder){
+      if (stopEventBuilder){
          for (auto &FEM : FEMArray)
            if(tC%1000==0){
              std::cout<<"Buffer size "<<FEM.buffer.size()<<std::endl;

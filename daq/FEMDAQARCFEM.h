@@ -24,7 +24,7 @@ public:
   explicit FEMDAQARCFEM(RunConfig& rC);
   ~FEMDAQARCFEM( );
   
-  virtual void startDAQ( const std::string &flags ="" ) override;
+  virtual void startDAQ( const std::vector<std::string> &flags ) override;
   virtual void stopDAQ( ) override;
   virtual void SendCommand(const char* cmd, bool wait = true) override;
   

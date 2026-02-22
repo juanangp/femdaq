@@ -46,11 +46,15 @@ void CommandFetcher::handleCommand(const std::string& line) {
        if(!daq->isReadOnly())daq->UpdateRunConfigInfo( );
     } else if (cmd == "startDAQ") {
        //Start acquisiton loop
-       daq->startDAQ( );
+       daq->startDAQ( args);
     } else if (cmd == "stopDAQ") {
        //Stop acquisiton loop
        daq->stopDAQ( );
-    } else if (cmd == "sleep") {
+    } else if (cmd == "Pedestals") {
+       //Start Pedestal loop (DCC)
+       daq->Pedestals( );
+    }
+     else if (cmd == "sleep") {
         int sleepTime = 1;
         auto result = std::from_chars(args[0].data(), args[0].data() + args[0].size(), sleepTime);
         if (result.ec == std::errc()) {

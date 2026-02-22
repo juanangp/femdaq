@@ -21,16 +21,46 @@ FEMDAQDCC::~FEMDAQDCC( ){
 
 }
 
+void FEMDAQDCC::Pedestals(){//TODO make configurable via flags
 
-void FEMDAQDCC::startDAQ( const std::string &flags ){
+  auto &FEM = FEMArray.front();
+  const auto &fecs = runConfig.fems.front().fecs;
+  char cmd[200];
 
-  std::stringstream ss(flags);
-  std::string flag;
+  //Pedestal acquisition
+  for(int i=0;i<100;i++){
+    SendCommand("isobus 0x6C",FEM);// SCA start
+    SendCommand("isobus 0x1C",FEM);// SCA stop
+    waitForTrigger();
+      for(auto fecID : fecs) {
+        for (int a = 0; a < 4; a++) {
+          sprintf(cmd, "hped acc %d %d %d:%d", fecID, a, 3, 78);
+          SendCommand(cmd);
+        }
+      }
+  }
+
+  SendCommand("fem 0");
+
+  for(auto fecID : fecs) {
+    for (int a = 0; a < 4; a++) {
+      sprintf(cmd, "hped getsummary %d %d %d:%d", fecID, a, 3, 78);
+      SendCommand(cmd, FEM, DCCPacket::packetType::BINARY, 1, DCCPacket::packetDataType::PEDESTAL);  // Get summary
+      sprintf(cmd, "hped centermean %d %d %d:%d %d", fecID, a, 3, 78, 250);
+      SendCommand(cmd);  // Set mean
+      sprintf(cmd, "hped setthr %d %d %d:%d %d %.1f", fecID, a, 3, 78, 250, 5.0);
+      
+    }
+  }
+
+}
+
+void FEMDAQDCC::startDAQ( const std::vector<std::string> &flags ){
 
   int mode = 0; //Mode 
   bool internal = false;
 
-  while (ss >> flag) {
+  for (const auto &flag : flags) {
     if(flag == "internal")internal = true; //Internal (random) trigger, otherwise external (default)
     else if(flag == "ZS") mode =1; //Zero suppression
     else std::cout<<"Unknown flag "<<flag<<" supported flags are internal (trigger) or ZS (Zero suppression)"<<std::endl;
@@ -71,12 +101,12 @@ void FEMDAQDCC::startDAQ( const std::string &flags ){
         sEvent.timestamp = FEMDAQ::getCurrentTime();
           for(auto fecID : fecs) {
             for (int a = 0; a < 4; a++) {
-              sprintf(cmd, "areq %d %d %d %d %d", mode, fecID, a, 0, 71);
+              sprintf(cmd, "areq %d %d %d %d %d", mode, fecID, a, 3, 78);
               SendCommand(cmd, FEM, DCCPacket::packetType::BINARY, 0, DCCPacket::packetDataType::EVENT);
             }
           }
 
-        UpdateRate(sEvent.timestamp, prevEventTime, prevEvCount);
+        UpdateRate(sEvent.timestamp, prevEventTime, eventID, prevEvCount);
         eventID++;
 
         if(sEvent.signalsID.size() ==0 )continue;
@@ -159,7 +189,7 @@ DCCPacket::packetReply FEMDAQDCC::SendCommand(const char* cmd, FEMProxy &FEM, DC
                 if (errno == EWOULDBLOCK || errno == EAGAIN) {
                     if (cnt % 1000 == 0) {
                         duration = std::chrono::duration_cast<std::chrono::duration<int>>(std::chrono::steady_clock::now() - startTime);
-                        if (runConfig.verboseLevel > RunConfig::Verbosity::Info) fprintf(stderr, "socket() failed: %s\n", strerror(errno));
+                        //if (runConfig.verboseLevel > RunConfig::Verbosity::Info) fprintf(stderr, "socket() failed: %s\n", strerror(errno));
                     }
                 } else {
                   std::string error ="recvfrom failed: " + std::string(strerror(errno));
@@ -195,9 +225,11 @@ DCCPacket::packetReply FEMDAQDCC::SendCommand(const char* cmd, FEMProxy &FEM, DC
             }
         }
 
-        if ((*buf_ual == '-')) {  // ERROR ASCII packet
+        if ((*buf_ual == '-') && strncmp(cmd, "wait", 4) == 0) {
+          return DCCPacket::packetReply::RETRY;
+        } else if ((*buf_ual == '-')) {  // ERROR ASCII packet
             if (runConfig.verboseLevel >= RunConfig::Verbosity::Info ) printf("ERROR packet: %s\n", buf_ual);
-            return DCCPacket::packetReply::RETRY;
+            return DCCPacket::packetReply::ERROR;
         }
 
         if (pckType == DCCPacket::packetType::BINARY) {  // DAQ packet

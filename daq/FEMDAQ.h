@@ -20,9 +20,10 @@ class FEMDAQ {
     
     void setActiveFEM(const std::string &FEMID);
 
-    virtual void startDAQ( const std::string &flags = "" ) = 0;
+    virtual void startDAQ( const std::vector<std::string> &flags ) = 0;
     virtual void stopDAQ( ) = 0;
     virtual void SendCommand(const char* cmd, bool wait = true) = 0;
+    virtual void Pedestals() { std::cout<<"Not implemented in current electronics"<<std::endl; }
 
     static std::atomic<bool> abrt;
     std::atomic<uint32_t> storedEvents{0};
@@ -33,7 +34,7 @@ class FEMDAQ {
     void OpenRootFile(const std::string &fileName, SignalEvent &sEvent, const double startTime);
     void CloseRootFile(const double endTime);
     void FillTree(const double eventTime, double &lastTimeSaved);
-    void UpdateRate(const double eventTime, double &prevEventTime, uint32_t &prevEvCount);
+    void UpdateRate(const double eventTime, double &prevEventTime, const uint32_t evCount, uint32_t &prevEvCount);
     void UpdateRunConfigInfo( ){ runConfig.UpdateInfo();}
 
     bool isReadOnly( ) const {return runConfig.readOnly;}

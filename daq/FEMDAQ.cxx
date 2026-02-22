@@ -155,7 +155,7 @@ const double elapsed = eventTime - lastTimeSaved;
   
 }
 
-void FEMDAQ::UpdateRate(const double eventTime, double &prevEventTime, uint32_t &prevEvCount){
+void FEMDAQ::UpdateRate(const double eventTime, double &prevEventTime, const uint32_t evCount, uint32_t &prevEvCount){
 
 const double elapsed = eventTime - prevEventTime;
 if (elapsed < 10)return;
@@ -165,8 +165,8 @@ if (elapsed < 10)return;
 
   std::strftime(tmpstm, sizeof(tmpstm), "%Y-%m-%d %H:%M:%S", std::localtime(&currentEvTime));
     
-  std::cout<<tmpstm<<" Total events: "<<storedEvents<<" Rate: "<<(storedEvents - prevEvCount)/elapsed<<" Hz"<<std::endl;
-  prevEvCount = storedEvents;
+  std::cout<<tmpstm<<" Total events: "<<evCount<<" Rate: "<<(evCount - prevEvCount)/elapsed<<" Hz"<<std::endl;
+  prevEvCount = evCount;
   prevEventTime = eventTime;
 
 }

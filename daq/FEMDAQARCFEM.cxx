@@ -198,7 +198,7 @@ void FEMDAQARCFEM::Receiver( ){
 
 }
 
-void FEMDAQARCFEM::startDAQ( const std::string &flags ){
+void FEMDAQARCFEM::startDAQ( const std::vector<std::string> &flags){
 
   stopEventBuilder = false;
   FEMDAQ::storedEvents = 0;
@@ -262,7 +262,7 @@ void FEMDAQARCFEM::EventBuilder( ){
       if(newEvent){//Save Event if closed
         sEvent.eventID = ev_count;
         sEvent.timestamp =  (double) ts * 2E-8 + startTime;
-        UpdateRate(sEvent.timestamp, prevEventTime, prevEvCount);
+        UpdateRate(sEvent.timestamp, prevEventTime, storedEvents, prevEvCount);
 
         if (file){
             FillTree(sEvent.timestamp, lastTimeSaved);

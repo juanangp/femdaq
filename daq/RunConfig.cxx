@@ -41,33 +41,37 @@ void RunConfig::loadConfig() {
 
     // FEM array
     if (run["FEM"]) {
-        
-        for (const auto& node : run["FEM"]) {
-            if (!node["id"] || !node["IP"]) {
-                std::ostringstream oss;
-                oss << "Each FEM entry must contain 'id' and 'IP' "
-                    << "(line " << node.Mark().line + 1 << ")";
-                throw std::runtime_error(oss.str());
-            }
-            int id = node["id"].as<int>();
-            std::string IP = node["IP"].as<std::string>();
-            FEM fem;
-            fem.id = id;
-            fem.IP = IP;
-            if(electronics == "DCC"){
-              if(!node["FEC"]["id"]){
-                std::ostringstream oss;
-                oss << "DDC electronics must contain a FEC id field "
-                    << "(line " << node.Mark().line + 1 << ")";
-                throw std::runtime_error(oss.str());
-              }
-              for (const auto& FECNode : node["FEC"]) {
-                 int fecID = FECNode ["id"].as<int>();
-                 fem.fecs.push_back(fecID);
-              }
-            }
-          fems.emplace_back(std::move(fem));
+      for (const auto& node : run["FEM"]) {
+        if (!node["id"] || !node["IP"]) {
+            std::ostringstream oss;
+            oss << "Each FEM entry must contain 'id' and 'IP' (line " 
+                << node.Mark().line + 1 << ")";
+            throw std::runtime_error(oss.str());
         }
+
+        FEM fem;
+        fem.id = node["id"].as<int>();
+        fem.IP = node["IP"].as<std::string>();
+
+        if (electronics == "DCC") {
+            if (!node["FEC"] || !node["FEC"].IsSequence()) {
+                std::ostringstream oss;
+                oss << "DDC electronics must contain a FEC list under FEM id " << fem.id
+                    << " (line " << node.Mark().line + 1 << ")";
+                throw std::runtime_error(oss.str());
+            }
+
+            for (const auto& FECNode : node["FEC"]) {
+                if (!FECNode["id"]) {
+                    throw std::runtime_error("A FEC entry is missing the 'id' field.");
+                }
+                int fecID = FECNode["id"].as<int>();
+                fem.fecs.push_back(fecID);
+            }
+        }
+      
+        fems.emplace_back(std::move(fem));
+      }
     } else {
         std::cout << "ERROR: No FEM entries found in configuration"<<std::endl;
     }

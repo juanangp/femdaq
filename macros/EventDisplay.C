@@ -292,7 +292,13 @@ public:
     void NextEvent() {
         if (!fChain) return;
 
+         // Refresh fChain
+        if (fChain->GetTree()) {
+          fChain->GetTree()->Refresh(); 
+        }
+
         // Number of entries can change if the DAQ is writing to the file
+        fChain->SetEntries(-1); 
         Long64_t totalEntries = fChain->GetEntries();
         int eventsToProcess = (fIsRunning) ? fStepSize : 1;
 
@@ -378,7 +384,7 @@ public:
 
     void UpdateStep(Int_t pos) { fStepSize = pos; fSliderLabel->SetText(Form("Step: %d ev", fStepSize)); }
     void OpenFile() { TGFileInfo fi; const char *ft[] = {"ROOT", "*.root", 0,0}; fi.fFileTypes = ft; new TGFileDialog(gClient->GetRoot(), this, kFDOpen, &fi); if(fi.fFilename) LoadDataFile(fi.fFilename); }
-    void OpenDecoding() { TGFileInfo fi; const char *ft[] = {"TXT", "*.txt", 0,0}; fi.fFileTypes = ft; new TGFileDialog(gClient->GetRoot(), this, kFDOpen, &fi); if(fi.fFilename) LoadDecoding(fi.fFilename); }
+    void OpenDecoding() { TGFileInfo fi; const char *ft[] = {"ALLFILES", "*", 0,0}; fi.fFileTypes = ft; new TGFileDialog(gClient->GetRoot(), this, kFDOpen, &fi); if(fi.fFilename) LoadDecoding(fi.fFilename); }
     
     void ToggleAuto() { if(!fIsRunning) { fIsRunning = true; fTimer->Start(100, kFALSE); fWatchdogTimer->Start(30000, kFALSE); ((TGTextButton*)gTQSender)->SetText("Stop Monitor"); } else { fIsRunning = false; fTimer->Stop(); fWatchdogTimer->Stop(); ((TGTextButton*)gTQSender)->SetText("&DAQ Live Mode"); } }
     

@@ -59,9 +59,6 @@ void FEMDAQARCFEM::SendCommand(const char* cmd, bool wait){
 
 void FEMDAQARCFEM::SendCommand(const char* cmd, FEMProxy &FEM, bool wait){
 
-
-  if (std::strncmp(cmd, "daq", 3) == 0)wait = false;
-
   FEM.mutex_socket.lock();
   const int e = sendto (FEM.client, cmd, strlen(cmd), 0, (struct sockaddr*)&(FEM.target), sizeof(struct sockaddr));
   FEM.mutex_socket.unlock();
@@ -77,7 +74,6 @@ void FEMDAQARCFEM::SendCommand(const char* cmd, FEMProxy &FEM, bool wait){
      waitForCmd(FEM);
    }
 
-
 }
 
 void FEMDAQARCFEM::waitForCmd(FEMProxy &FEM){
@@ -91,11 +87,11 @@ void FEMDAQARCFEM::waitForCmd(FEMProxy &FEM){
       timeout++;
     } while ( condition && timeout <500);
 
-  if (runConfig.verboseLevel >= RunConfig::Verbosity::Debug )std::cout<<"Cmd sent "<<FEM.cmd_sent<<" Cmd Received: "<<FEM.cmd_rcv<<std::endl;
+  if (runConfig.verboseLevel >= RunConfig::Verbosity::Debug )std::cout<<"FEM "<<FEM.femID<<" Cmd sent "<<FEM.cmd_sent<<" Cmd Received: "<<FEM.cmd_rcv<<std::endl;
 
   if(timeout>=500){
-     std::cout<<"Command timeout "<<timeout<<" Cmd sent "<<FEM.cmd_sent<<" Cmd Received: "<<FEM.cmd_rcv<<std::endl;
-     FEM.cmd_sent--;
+     std::cout<<"FEM "<<FEM.femID<<" Command timeout "<<timeout<<" Cmd sent "<<FEM.cmd_sent<<" Cmd Received: "<<FEM.cmd_rcv<<std::endl;
+     throw std::runtime_error("Command timeout");
   }
   
 }
@@ -122,6 +118,8 @@ void FEMDAQARCFEM::Receiver( ){
     }
   smax++;
   int err=0;
+  const size_t offset = (runConfig.electronics == "FEMINOS")? 1 : 0;
+  
     while (!stopReceiver){
 
       // Copy the read fds from what we computed outside of the loop
@@ -151,23 +149,24 @@ void FEMDAQARCFEM::Receiver( ){
                 throw std::runtime_error(error);
               }
           }
-            if (runConfig.verboseLevel >= RunConfig::Verbosity::Debug)std::cout<<"Packet received with length "<<length<<" bytes"<<std::endl;
+            if (runConfig.verboseLevel >= RunConfig::Verbosity::Debug)std::cout<<"FEM "<<FEM.femID<<" Packet received with length "<<length<<" bytes"<<std::endl;
 
             if(length<= 6)continue; //empty frame?
               const size_t size = length/sizeof(uint16_t);//Note that length is in bytes while size is uint16_t
 
                 if(packetAPI.isDataFrame(&buf_rcv[1])) {
+                  FEM.cmd_daq_rcv++;
                   //const std::deque<uint16_t> frame (&buf_rcv[1], &buf_rcv[size -1]);
                   FEM.mutex_mem.lock();
-                  FEM.buffer.insert(FEM.buffer.end(), &buf_rcv[1], &buf_rcv[size-1]);
+                  FEM.buffer.insert(FEM.buffer.end(), &buf_rcv[1], &buf_rcv[size-offset]);
                   const size_t bufferSize = FEM.buffer.size();
                   FEM.mutex_mem.unlock();
                     if (runConfig.verboseLevel >= RunConfig::Verbosity::Debug){
                       //packetAPI.DataPacket_Print(&buf_rcv[1], size-1);
-                      std::cout<<"Packet buffered with size "<<(int)size-1<<" queue size: "<<bufferSize<<std::endl;
+                      std::cout<<"FEM "<<FEM.femID<<" Packet buffered with size "<<(int)size-1<<" queue size: "<<bufferSize<<std::endl;
                     }
                     if( bufferSize > 1024*1024*1024){
-                      std::string error ="Buffer FULL with size "+std::to_string(bufferSize/sizeof(uint16_t))+" bytes";
+                      std::string error ="FEM"+ std::to_string(FEM.femID) +" Buffer FULL with size "+std::to_string(bufferSize/sizeof(uint16_t))+" bytes";
                      throw std::runtime_error(error);
                     }
 
@@ -178,14 +177,14 @@ void FEMDAQARCFEM::Receiver( ){
                   //const size_t bufferSize = FEM.buffer.size();
                   //FEM.mutex_mem.unlock();
                   if (runConfig.verboseLevel >= RunConfig::Verbosity::Info){
-                    std::cout<<"MONI PACKET"<<std::endl;
+                    std::cout<<"FEM "<<FEM.femID<<" MONI PACKET"<<std::endl;
                     packetAPI.DataPacket_Print(&buf_rcv[1], size-1);
                   }
                 } else {
                   const short errorCode = buf_rcv[2];
                   if (runConfig.verboseLevel > RunConfig::Verbosity::Info || errorCode ){
                     if (errorCode)std::cout<<"---------------------ERROR----------------"<<std::endl;
-                    else std::cout<<"DEBUG PACKET REPLY"<<std::endl;
+                    else std::cout<<"FEM "<<FEM.femID<<" DEBUG PACKET REPLY"<<std::endl;
                     packetAPI.DataPacket_Print(&buf_rcv[1], size-1);
                   }
                   //std::cout<<"Frame is neither data or monitoring Val 0x"<<std::hex<<buf_rcv[1]<<std::dec<<std::endl;
@@ -194,7 +193,7 @@ void FEMDAQARCFEM::Receiver( ){
         }
     }
 
-  std::cout<<"End of receiver "<<err<<std::endl;
+  std::cout<<" End of receiver "<<err<<std::endl;
 
 }
 
@@ -203,12 +202,39 @@ void FEMDAQARCFEM::startDAQ( const std::vector<std::string> &flags){
   stopEventBuilder = false;
   FEMDAQ::storedEvents = 0;
   eventBuilderThread = std::thread( &FEMDAQARCFEM::EventBuilder, this);
+  std::this_thread::sleep_for(std::chrono::seconds(1));
+  char daq_cmd[40];
+  //First daq request, do not add sequence number
+  const uint32_t reqCmd = 0xFFF;
+  sprintf(daq_cmd, "daq 0x%06x F", reqCmd);
+    for (auto &FEM : FEMArray){
+      if(!FEM.active)continue;
+        FEM.cmd_daq_req = reqCmd;
+        SendCommand(daq_cmd, FEM, false);
+    }
+
     while (!FEMDAQ::abrt && (runConfig.nEvents == 0 || FEMDAQ::storedEvents.load() < runConfig.nEvents) ){
+      for (auto &FEM : FEMArray){
+        if(!FEM.active)continue;
+          if(FEM.cmd_daq_rcv >= FEM.cmd_daq_req){
+              if (runConfig.verboseLevel >= RunConfig::Verbosity::Debug )std::cout<<"FEM "<<FEM.femID<<" Daq frames sent "<<FEM.cmd_daq_req<<" Daq frames rcv "<<FEM.cmd_daq_rcv<<std::endl;
+            SendCommand(daq_cmd, FEM, false);
+            FEM.cmd_daq_rcv = 0;
+          }
+      }
       std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
+
 }
 
 void FEMDAQARCFEM::stopDAQ( ){
+
+  char daq_cmd[40];
+  SendCommand("sca enable 0");
+  std::this_thread::sleep_for(std::chrono::seconds(1));
+
+  sprintf(daq_cmd, "daq 0x000000 F\n");
+  SendCommand(daq_cmd, false);
 
   stopEventBuilder = true;
   if (eventBuilderThread.joinable())
@@ -298,14 +324,17 @@ void FEMDAQARCFEM::EventBuilder( ){
       if (stopEventBuilder){
          for (auto &FEM : FEMArray)
            if(tC%1000==0){
-             std::cout<<"Buffer size "<<FEM.buffer.size()<<std::endl;
+             if (runConfig.verboseLevel >= RunConfig::Verbosity::Debug )std::cout<<"FEM "<<FEM.femID<<" Buffer size "<<FEM.buffer.size()<<std::endl;
            }
          tC++;
-         if(tC>=5000)break;
+         if(tC>=10000)break;
       }
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
 
   }
+
+  for (auto &FEM : FEMArray)
+    if(FEM.buffer.size()>0)std::cout<<"FEM "<<FEM.femID<<" Buffer size left "<<FEM.buffer.size()<<std::endl;
 
   if (file){
     CloseRootFile(FEMDAQ::getCurrentTime());

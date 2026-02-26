@@ -58,7 +58,7 @@ private:
     double               fTimestamp;
     std::vector<int>    *fSignalsID = nullptr;
     std::vector<short>  *fPulses = nullptr;
-    
+
     Long64_t             fEntry = 0;
     int                  fNChannels = 1;
     double               fTimeRateStart = -1;
@@ -260,7 +260,8 @@ public:
         }
     }
 
-    void LoadDataFile(const char* path) {
+    void LoadDataFile(const char* path, bool newRun=true) {
+        
         if (gSystem->AccessPathName(path)) return;
         fBaseFileName = path;
         ParseRunSubrun(fBaseFileName, fCurrentRun, fCurrentSubrun);
@@ -269,10 +270,19 @@ public:
         if (fReaderEventID)   { delete fReaderEventID;   fReaderEventID = nullptr; }
         if (fReaderTimestamp) { delete fReaderTimestamp; fReaderTimestamp = nullptr; }
         if (fReader)          { delete fReader;          fReader = nullptr; }
-        if (fChain)           { delete fChain;           fChain = nullptr; }
+        if (fChain)           { delete fChain;           fChain = nullptr;
+        }
     
-        fChain = new TChain("SignalEvent"); fChain->Add(fBaseFileName);
-        fEntry = 0; fRatePoints = 0; fTimeRateStart = -1;
+        fChain = new TChain("SignalEvent");
+        fChain->Add(fBaseFileName, -1);
+        fChain->SetEntries(-1);
+        fChain->GetEntries();
+
+        fEntry = 0;
+
+        if(newRun){
+          ManualReset();
+        }
         
         fReader = new TTreeReader(fChain);
         fReaderSignalsID = new TTreeReaderValue<std::vector<int>>(*fReader, "signalsID");
@@ -299,10 +309,10 @@ public:
     }
 
     void NextEvent() {
-        if (!fReader) return;
+        if (!fReader || !fChain) return;
 
         fChain->SetEntries(-1); 
-        Long64_t totalEntries = fChain->GetEntries(); 
+        Long64_t totalEntries = fChain->GetEntries();
 
         if (fEntry >= totalEntries){
          if (fIsRunning) {
@@ -410,13 +420,13 @@ public:
     void OpenFile() { TGFileInfo fi; const char *ft[] = {"ROOT", "*.root", 0,0}; fi.fFileTypes = ft; new TGFileDialog(gClient->GetRoot(), this, kFDOpen, &fi); if(fi.fFilename) LoadDataFile(fi.fFilename); }
     void OpenDecoding() { TGFileInfo fi; const char *ft[] = {"ALLFILES", "*", 0,0}; fi.fFileTypes = ft; new TGFileDialog(gClient->GetRoot(), this, kFDOpen, &fi); if(fi.fFilename) LoadDecoding(fi.fFilename); }
     
-    void ToggleAuto() { if(!fIsRunning) { fIsRunning = true; fTimer->Start(100, kFALSE); fWatchdogTimer->Start(30000, kFALSE); ((TGTextButton*)gTQSender)->SetText("Stop Monitor"); } else { fIsRunning = false; fTimer->Stop(); fWatchdogTimer->Stop(); ((TGTextButton*)gTQSender)->SetText("&DAQ Live Mode"); } }
+    void ToggleAuto() { if(!fIsRunning) { fIsRunning = true; fTimer->Start(100, kFALSE); fWatchdogTimer->Start(5000, kFALSE); ((TGTextButton*)gTQSender)->SetText("Stop Monitor"); } else { fIsRunning = false; fTimer->Stop(); fWatchdogTimer->Stop(); ((TGTextButton*)gTQSender)->SetText("&DAQ Live Mode"); } }
     
     void CheckForNewData() {
     if (!fChain || !fIsRunning || fCheckNextRun->GetState() != kButtonDown) return;
 
     // 1. Refresh current entries
-    fChain->GetEntries(); 
+    if(fEntry < fChain->GetEntries() )return; 
 
     // 2. Extract directory and build search patterns
     TString dirName = gSystem->DirName(fBaseFileName);
@@ -449,7 +459,6 @@ public:
             foundNextRun = dirName + "/" + fileName;
         }
     }
-
     gSystem->FreeDirectory(dir);
 
     // 4. Load found files
@@ -457,21 +466,19 @@ public:
         std::cout << ">>> New Subrun found: " << foundNextSubrun << std::endl;
         fCurrentSubrun++;
         fBaseFileName = foundNextSubrun;
-        fChain->Add(fBaseFileName);
+        LoadDataFile(foundNextSubrun, false);
         fDataPathEntry->SetText(gSystem->BaseName(fBaseFileName));
         fDataPathEntry->SetToolTipText(fBaseFileName);
         
-    } 
-    else if (foundNextRun != "") {
+    } else if (foundNextRun != "") {
         std::cout << ">>> New Run detected: " << foundNextRun << std::endl;
         ManualReset(); // Reset histograms for new main Run
         fCurrentRun++;
         fCurrentSubrun = 1;
         fBaseFileName = foundNextRun;
-        fChain->Add(fBaseFileName);
-        fDataPathEntry->SetText(gSystem->BaseName(fBaseFileName));
-        fDataPathEntry->SetToolTipText(fBaseFileName);
+        LoadDataFile(foundNextRun);
     }
+
 }
 
 
@@ -488,7 +495,7 @@ public:
 }
 
     std::map<int,int> readDecoding(std::string f) { std::map<int,int> m; std::ifstream i(f); int s,p; while(i>>s>>p) m[s]=p; return m; }
-    virtual ~DAQGUI() { ClearEvent(); if(fChain) delete fChain; if(fTimer) delete fTimer; if(fWatchdogTimer) delete fWatchdogTimer; }
+    virtual ~DAQGUI() { ClearEvent(); if (fReader) delete fReader; if(fChain) delete fChain; if(fTimer) delete fTimer; if(fWatchdogTimer) delete fWatchdogTimer; }
     ClassDef(DAQGUI, 0)
 };
 

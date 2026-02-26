@@ -21,8 +21,6 @@ public:
         buffer = std::move(other.buffer);
         cmd_sent.store(other.cmd_sent.load());
         cmd_rcv.store(other.cmd_rcv.load());
-        cmd_daq_req.store(other.cmd_daq_req.load());
-        cmd_daq_rcv.store(other.cmd_daq_rcv.load());
     }
 
     FEMProxy& operator=(FEMProxy&& other) noexcept {
@@ -36,8 +34,6 @@ public:
             
             cmd_sent.store(other.cmd_sent.load());
             cmd_rcv.store(other.cmd_rcv.load());
-            cmd_daq_req.store(other.cmd_daq_req.load());
-            cmd_daq_rcv.store(other.cmd_daq_rcv.load());
         }
         return *this;
     }
@@ -47,9 +43,6 @@ public:
 
     std::atomic<uint32_t> cmd_sent{0};
     std::atomic<uint32_t> cmd_rcv{0};
-    std::atomic<uint32_t> cmd_daq_req{0};
-    std::atomic<uint32_t> cmd_daq_rcv{0};
-    uint8_t cmd_daq_seq = 0;
     int femID = 0;
     size_t bufferIndex = 0;
 

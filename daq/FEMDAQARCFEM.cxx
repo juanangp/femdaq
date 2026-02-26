@@ -155,7 +155,6 @@ void FEMDAQARCFEM::Receiver( ){
               const size_t size = length/sizeof(uint16_t);//Note that length is in bytes while size is uint16_t
 
                 if(packetAPI.isDataFrame(&buf_rcv[1])) {
-                  FEM.cmd_daq_rcv++;
                   //const std::deque<uint16_t> frame (&buf_rcv[1], &buf_rcv[size -1]);
                   FEM.mutex_mem.lock();
                   FEM.buffer.insert(FEM.buffer.end(), &buf_rcv[1], &buf_rcv[size-offset]);
@@ -206,23 +205,11 @@ void FEMDAQARCFEM::startDAQ( const std::vector<std::string> &flags){
   char daq_cmd[40];
   runStartTime = FEMDAQ::getCurrentTime();
   //First daq request, do not add sequence number
-  const uint32_t reqCmd = 0xFFF;
+  const uint32_t reqCmd = 0xFF;
   sprintf(daq_cmd, "daq 0x%06x F", reqCmd);
-    for (auto &FEM : FEMArray){
-      if(!FEM.active)continue;
-        FEM.cmd_daq_req = reqCmd;
-        SendCommand(daq_cmd, FEM, false);
-    }
 
     while (!FEMDAQ::abrt && (runConfig.nEvents == 0 || FEMDAQ::storedEvents.load() < runConfig.nEvents) ){
-      for (auto &FEM : FEMArray){
-        if(!FEM.active)continue;
-          if(FEM.cmd_daq_rcv >= FEM.cmd_daq_req){
-              if (runConfig.verboseLevel >= RunConfig::Verbosity::Debug )std::cout<<"FEM "<<FEM.femID<<" Daq frames sent "<<FEM.cmd_daq_req<<" Daq frames rcv "<<FEM.cmd_daq_rcv<<std::endl;
-            SendCommand(daq_cmd, FEM, false);
-            FEM.cmd_daq_rcv = 0;
-          }
-      }
+      SendCommand(daq_cmd,false);
       std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 
@@ -330,7 +317,7 @@ void FEMDAQARCFEM::EventBuilder( ){
          tC++;
          if(tC>=10000)break;
       }
-    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
 
   }
 

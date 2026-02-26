@@ -3,13 +3,13 @@
 #include <TGLabel.h>
 #include <TGTextEntry.h>
 #include <TGNumberEntry.h>
-#include <TGSlider.h>
 #include <TRootEmbeddedCanvas.h>
 #include <TGFileDialog.h>
 #include <TCanvas.h>
 #include <TFile.h>
 #include <TTree.h>
 #include <TChain.h>
+#include <TTreeReader.h>
 #include <TH1.h>
 #include <TH2.h>
 #include <TGraph.h>
@@ -35,18 +35,24 @@ private:
     TGTextEntry         *fDecoPathEntry;
     TGLabel             *fStatusLabel;
     TGCheckButton       *fCheckNextRun;
-    TGHSlider           *fStepSlider;
-    TGLabel             *fSliderLabel;
 
     // Pulse Parameter Entries
     TGNumberEntry *fBaseStart, *fBaseEnd;
     TGNumberEntry *fPulseStart, *fPulseEnd;
     TGNumberEntry *fSigmaThr;
+    TGNumberEntry *fStepSize;
     
     TChain              *fChain = nullptr;
+    TTreeReader         *fReader = nullptr;
     std::map<int, int>   fDecodingMap;
     TTimer              *fTimer;
     TTimer              *fWatchdogTimer;
+    
+    // Lectores para tus ramas específicas
+    TTreeReaderValue<std::vector<int>>   *fReaderSignalsID = nullptr;
+    TTreeReaderValue<std::vector<short>> *fReaderPulses = nullptr;
+    TTreeReaderValue<int>                *fReaderEventID = nullptr;
+    TTreeReaderValue<double>             *fReaderTimestamp = nullptr;
     
     int                  fEventID;
     double               fTimestamp;
@@ -61,13 +67,13 @@ private:
     
     int                  fCurrentRun = -1;
     int                  fCurrentSubrun = -1;
-    int                  fStepSize = 10;
     TString              fBaseFileName = "";
     TString              fLastDecoFile = "";
 
     // Default Pulse Params
     int fBLS = 10, fBLE = 110, fPS = 100, fPE = 500;
     double fSThr = 7.0;
+    int fSSz = 100;
 
     TH1F *fSpectra = nullptr;
     TH2F *fHitMap = nullptr;
@@ -138,14 +144,9 @@ public:
         fSigmaThr = new TGNumberEntry(leftFrame, fSThr, 5, -1, TGNumberFormat::kNESRealOne);
         leftFrame->AddFrame(fSigmaThr, btnL);
 
-        // --- Step Slider ---
-        fSliderLabel = new TGLabel(leftFrame, Form("Step: %d ev", fStepSize));
-        leftFrame->AddFrame(fSliderLabel, labL);
-        fStepSlider = new TGHSlider(leftFrame, 180, kSlider1 | kScaleBoth);
-        fStepSlider->SetRange(1, 1000);
-        fStepSlider->SetPosition(fStepSize);
-        fStepSlider->Connect("PositionChanged(Int_t)", "DAQGUI", this, "UpdateStep(Int_t)");
-        leftFrame->AddFrame(fStepSlider, btnL);
+        leftFrame->AddFrame(new TGLabel(leftFrame, "Step Size"), labL);
+        fStepSize = new TGNumberEntry(leftFrame, fSSz, 5, -1, TGNumberFormat::kNESInteger);
+        leftFrame->AddFrame(fStepSize, btnL);
 
         fCheckNextRun = new TGCheckButton(leftFrame, "Auto-load Next Run");
         leftFrame->AddFrame(fCheckNextRun, labL);
@@ -197,11 +198,12 @@ public:
     void SaveConfig() {
         std::ofstream cfg("/tmp/.femdaq_config.txt", std::ios::out | std::ios::trunc);
         if (cfg.is_open()) {
-            cfg << fStepSize << "\n" << (fCheckNextRun->GetState() == kButtonDown ? 1 : 0) << "\n";
+            cfg << (fCheckNextRun->GetState() == kButtonDown ? 1 : 0) << "\n";
             cfg << fBaseFileName.Data() << "\n" << fLastDecoFile.Data() << "\n";
             cfg << (int)fBaseStart->GetNumber() << "\n" << (int)fBaseEnd->GetNumber() << "\n";
             cfg << (int)fPulseStart->GetNumber() << "\n" << (int)fPulseEnd->GetNumber() << "\n";
             cfg << fSigmaThr->GetNumber() << std::endl;
+            cfg << (int)fStepSize->GetNumber() << std::endl;
             cfg.close();
         }
     }
@@ -210,12 +212,9 @@ public:
         std::ifstream cfg("/tmp/.femdaq_config.txt");
         if (cfg.is_open()) {
             std::string line;
-            if (std::getline(cfg, line)) fStepSize = std::stoi(line);
             int autoRun = 1;
             if (std::getline(cfg, line)) autoRun = std::stoi(line);
             
-            fStepSlider->SetPosition(fStepSize);
-            UpdateStep(fStepSize);
             fCheckNextRun->SetState(autoRun ? kButtonDown : kButtonUp);
 
             std::string dataPath, decoPath;
@@ -227,6 +226,7 @@ public:
             if (std::getline(cfg, line)) fPulseStart->SetNumber(std::stoi(line));
             if (std::getline(cfg, line)) fPulseEnd->SetNumber(std::stoi(line));
             if (std::getline(cfg, line)) fSigmaThr->SetNumber(std::stod(line));
+            if (std::getline(cfg, line)) fStepSize->SetNumber(std::stoi(line));
 
             cfg.close();
             if (!decoPath.empty()) LoadDecoding(decoPath.c_str());
@@ -264,13 +264,22 @@ public:
         if (gSystem->AccessPathName(path)) return;
         fBaseFileName = path;
         ParseRunSubrun(fBaseFileName, fCurrentRun, fCurrentSubrun);
-        if (fChain) delete fChain;
+        if (fReaderSignalsID) { delete fReaderSignalsID; fReaderSignalsID = nullptr; }
+        if (fReaderPulses)    { delete fReaderPulses;    fReaderPulses = nullptr; }
+        if (fReaderEventID)   { delete fReaderEventID;   fReaderEventID = nullptr; }
+        if (fReaderTimestamp) { delete fReaderTimestamp; fReaderTimestamp = nullptr; }
+        if (fReader)          { delete fReader;          fReader = nullptr; }
+        if (fChain)           { delete fChain;           fChain = nullptr; }
+    
         fChain = new TChain("SignalEvent"); fChain->Add(fBaseFileName);
         fEntry = 0; fRatePoints = 0; fTimeRateStart = -1;
-        fChain->SetBranchAddress("eventID", &fEventID);
-        fChain->SetBranchAddress("timestamp", &fTimestamp);
-        fChain->SetBranchAddress("signalsID", &fSignalsID);
-        fChain->SetBranchAddress("pulses", &fPulses);
+        
+        fReader = new TTreeReader(fChain);
+        fReaderSignalsID = new TTreeReaderValue<std::vector<int>>(*fReader, "signalsID");
+        fReaderPulses    = new TTreeReaderValue<std::vector<short>>(*fReader, "pulses");
+        fReaderEventID   = new TTreeReaderValue<int>(*fReader, "eventID");
+        fReaderTimestamp = new TTreeReaderValue<double>(*fReader, "timestamp");
+    
         fDataPathEntry->SetText(gSystem->BaseName(path));
         fDataPathEntry->SetToolTipText(path);
         SetWindowName(Form("DAQ Viewer - %s", gSystem->BaseName(path)));
@@ -290,38 +299,54 @@ public:
     }
 
     void NextEvent() {
-        if (!fChain) return;
+        if (!fReader) return;
 
-         // Refresh fChain
-        if (fChain->GetTree()) {
-          fChain->GetTree()->Refresh(); 
+        fChain->SetEntries(-1); 
+        Long64_t totalEntries = fChain->GetEntries(); 
+
+        if (fEntry >= totalEntries){
+         if (fIsRunning) {
+           fStatusLabel->SetText(Form("Status: Waiting DAQ... (Processed: %lld/%lld)", fEntry, totalEntries));
+         } else {
+           fStatusLabel->SetText(Form("Status: End of File (%lld/%lld)", fEntry, totalEntries));
+         }
+         return;
+       }
+
+        const int stepSize = fStepSize->GetNumber();
+
+        int eventsToProcess = (fIsRunning) ? stepSize : 1;
+        if(fEntry + eventsToProcess >= totalEntries){
+           eventsToProcess = totalEntries - fEntry;
+           //cout<<"Events to process "<<eventsToProcess <<" " <<totalEntries <<" "<< fEntry<<endl;
         }
 
-        // Number of entries can change if the DAQ is writing to the file
-        fChain->SetEntries(-1); 
-        Long64_t totalEntries = fChain->GetEntries();
-        int eventsToProcess = (fIsRunning) ? fStepSize : 1;
+        Long64_t localEntry = fChain->LoadTree(fEntry + eventsToProcess -1);
+        if (localEntry < 0) return;
+        if ( fReader->SetLocalEntry(localEntry)!= 0)return;
 
         for (int i = 0; i < eventsToProcess; ++i) {
             // Check if we reached the end of the available data
-            if (fEntry >= totalEntries) {
-                if (fIsRunning) {
-                    fStatusLabel->SetText(Form("Status: Waiting DAQ... (Processed: %lld/%lld)", fEntry, totalEntries));
-                } else {
-                    fStatusLabel->SetText(Form("Status: End of File (%lld/%lld)", fEntry, totalEntries));
-                }
-                break; // Exit the processing loop but proceed to draw/update
-            }
+            if (fEntry >= totalEntries) break;
+            
+            localEntry = fChain->LoadTree(fEntry);
 
-            fChain->GetEntry(fEntry);
+            if (localEntry < 0) break;
+
+            if ( fReader->SetLocalEntry(localEntry)!= 0)break;
+
+            fEventID   = **fReaderEventID;
+            fTimestamp = **fReaderTimestamp;
+            fSignalsID = &(**fReaderSignalsID); 
+            fPulses    = &(**fReaderPulses);
             
             // Rate logic
             if (fEntry == 0) {
                 fTimeRateStart = fTimestamp; 
                 fRateGraph->SetPoint(fRatePoints, fTimestamp, 0.); 
-            } else if (fEntry % fStepSize == 0) {
+            } else if (fEntry % stepSize == 0) {
                 double dt = fTimestamp - fTimeRateStart;
-                if (dt > 0) fRateGraph->SetPoint(fRatePoints++, fTimestamp, (double)fStepSize / dt);
+                if (dt > 0) fRateGraph->SetPoint(fRatePoints++, fTimestamp, (double)stepSize / dt);
                 fTimeRateStart = fTimestamp;
             }
 
@@ -347,13 +372,14 @@ public:
                         else { posY += area * ch; areaY += area; }
                     }
                 }
-                if (shouldDraw) {
-                    if (!fStacks) fStacks = new THStack("Pulses", Form("Event %d", fEventID));
-                    TH1S *h = new TH1S(Form("h_s%d", sID), "", 512, 0, 512);
-                    for(int p=0; p<512; p++) h->SetBinContent(p+1, pulse[p]);
-                    h->SetLineColor((sID % 72) + 1);
-                    fHistos.push_back(h); fStacks->Add(h);
-                }
+
+                if (shouldDraw){
+                  if (!fStacks) fStacks = new THStack("Pulses", Form("Event %d", fEventID));
+                  TH1S *h = new TH1S(Form("h_s%d", sID), "", 512, 0, 512);
+                  for(int p=0; p<512; p++) h->SetBinContent(p+1, pulse[p]);
+                  h->SetLineColor((sID % 72) + 1);
+                  fHistos.push_back(h); fStacks->Add(h);
+               }
             }
             if(totArea)fSpectra->Fill(totArea);
             if (areaX > 0 && areaY > 0) fHitMap->Fill(posX / areaX, posY / areaY);
@@ -370,7 +396,6 @@ public:
         can->Update();
     }
 
-
     void ManualReset() {
         fSpectra->Reset(); fHitMap->Reset(); fRateGraph->Set(0);
         fRateGraph->SetPoint(0,0,0); fRatePoints = 0; fTimeRateStart = -1;
@@ -382,7 +407,6 @@ public:
         fMainCanvas->GetCanvas()->SaveAs(outName);
     }
 
-    void UpdateStep(Int_t pos) { fStepSize = pos; fSliderLabel->SetText(Form("Step: %d ev", fStepSize)); }
     void OpenFile() { TGFileInfo fi; const char *ft[] = {"ROOT", "*.root", 0,0}; fi.fFileTypes = ft; new TGFileDialog(gClient->GetRoot(), this, kFDOpen, &fi); if(fi.fFilename) LoadDataFile(fi.fFilename); }
     void OpenDecoding() { TGFileInfo fi; const char *ft[] = {"ALLFILES", "*", 0,0}; fi.fFileTypes = ft; new TGFileDialog(gClient->GetRoot(), this, kFDOpen, &fi); if(fi.fFilename) LoadDecoding(fi.fFilename); }
     

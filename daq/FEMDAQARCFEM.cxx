@@ -204,6 +204,7 @@ void FEMDAQARCFEM::startDAQ( const std::vector<std::string> &flags){
   eventBuilderThread = std::thread( &FEMDAQARCFEM::EventBuilder, this);
   std::this_thread::sleep_for(std::chrono::seconds(1));
   char daq_cmd[40];
+  runStartTime = FEMDAQ::getCurrentTime();
   //First daq request, do not add sequence number
   const uint32_t reqCmd = 0xFFF;
   sprintf(daq_cmd, "daq 0x%06x F", reqCmd);
@@ -231,6 +232,7 @@ void FEMDAQARCFEM::stopDAQ( ){
 
   char daq_cmd[40];
   SendCommand("sca enable 0");
+  runEndTime = FEMDAQ::getCurrentTime();
   std::this_thread::sleep_for(std::chrono::seconds(1));
 
   sprintf(daq_cmd, "daq 0x000000 F\n");
@@ -245,10 +247,9 @@ void FEMDAQARCFEM::stopDAQ( ){
 void FEMDAQARCFEM::EventBuilder( ){
 
   SignalEvent sEvent;
-  const double startTime = FEMDAQ::getCurrentTime();
-  double lastTimeSaved = startTime;
+  double lastTimeSaved = runStartTime;
   uint32_t prevEvCount = 0;
-  double prevEventTime = startTime;
+  double prevEventTime = runStartTime;
   uint32_t ev_count = 0;
   uint64_t ts = 0;
   uint64_t fileSize =0;
@@ -287,7 +288,7 @@ void FEMDAQARCFEM::EventBuilder( ){
 
       if(newEvent){//Save Event if closed
         sEvent.eventID = ev_count;
-        sEvent.timestamp =  (double) ts * 2E-8 + startTime;
+        sEvent.timestamp =  (double) ts * 2E-8 + runStartTime;
         UpdateRate(sEvent.timestamp, prevEventTime, storedEvents, prevEvCount);
 
         if (file){
@@ -300,7 +301,7 @@ void FEMDAQARCFEM::EventBuilder( ){
            
            if (fileSize >= runConfig.fileSize ) {
              
-             CloseRootFile(FEMDAQ::getCurrentTime());
+             CloseRootFile(sEvent.timestamp);
 
              fileIndex++;
              fileSize=0;
@@ -310,7 +311,7 @@ void FEMDAQARCFEM::EventBuilder( ){
              
              std::cout<<"New file "<<fileName<<" "<<std::endl;
 
-             OpenRootFile(fileName, sEvent, FEMDAQ::getCurrentTime());
+             OpenRootFile(fileName, sEvent, sEvent.timestamp);
            }
 
         }
@@ -337,7 +338,7 @@ void FEMDAQARCFEM::EventBuilder( ){
     if(FEM.buffer.size()>0)std::cout<<"FEM "<<FEM.femID<<" Buffer size left "<<FEM.buffer.size()<<std::endl;
 
   if (file){
-    CloseRootFile(FEMDAQ::getCurrentTime());
+    CloseRootFile(runEndTime);
   }
 
   std::cout<<"End of event builder "<<storedEvents<<" events acquired"<<std::endl;

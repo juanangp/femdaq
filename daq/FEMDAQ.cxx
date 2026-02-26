@@ -148,7 +148,7 @@ void FEMDAQ::FillTree(const double eventTime, double &lastTimeSaved){
 event_tree->Fill();
 const double elapsed = eventTime - lastTimeSaved;
 
-  if(storedEvents%1000==0 || elapsed >100 ){
+  if(storedEvents%1000==0 || elapsed >60 ){
     event_tree->AutoSave("SaveSelf");
     lastTimeSaved = eventTime;
   }

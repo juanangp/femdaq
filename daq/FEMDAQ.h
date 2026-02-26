@@ -60,6 +60,8 @@ class FEMDAQ {
   protected:
     explicit FEMDAQ(RunConfig& rC);
     RunConfig runConfig;
+    double runStartTime =0;
+    double runEndTime =0;
     
     static bool RegisterType(const std::string& electronics, FactoryFunc func) {
         GetRegistry()[electronics] = func;

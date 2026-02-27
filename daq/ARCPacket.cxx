@@ -426,19 +426,19 @@ void ParseEventFromWords(std::deque<uint16_t> &event, SignalEvent &sEvent, uint6
     } else if ((w & PFX_8_BIT_CONTENT_MASK) == PFX_START_OF_EVENT_ARC){
       //std::cout<<"START OF EVENT "<<std::endl;
       idx++;
-      tS = event[idx] & 0xFFFF;
+      tS = (uint64_t)event[idx];
       idx++;
-      tS |= ( event[idx] << 16) & 0xFFFF0000;
+      tS |= ( (uint64_t)event[idx] << 16);
       idx++;
-      tS |= ( event[idx] << 24) & 0xFFFF00000000;
+      tS |= ( (uint64_t)event[idx] << 32);
       idx++;
 
       //Event count
-      ev_count = event[idx];
+      ev_count = (uint32_t)event[idx];
       idx++;
-      ev_count |=  ( event[idx] << 16);
+      ev_count |=  ( (uint32_t)event[idx] << 16);
       idx++;
-      //std::cout<<"EvCnt "<<ev_count<<" TS "<<tS <<std::endl;
+      //if(ev_count%100==0)std::cout<<"EvCnt "<<ev_count<<" TS "<<tS <<std::endl;
     } else if ((w & PFX_9_BIT_CONTENT_MASK) == PFX_CHIP_CHAN_HIT_CNT) {
       //printf( "Card %02d Chip %01d Channel_Hit_Count %02d\n", GET_CARD_IX(event[idx]), GET_CHIP_IX(event[idx]), GET_CHAN_IX(event[idx]) );
       idx++;

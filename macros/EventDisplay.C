@@ -84,7 +84,7 @@ private:
 public:
     DAQGUI() : TGMainFrame(gClient->GetRoot(), 1200, 900) {
         
-        fSpectra = new TH1F("Spectra", "Total Area;Area;Counts", 2048, 0, 1000000);
+        fSpectra = new TH1F("Spectra", "Total Area;Area;Counts", 2048, 0, 3000000);
         fHitMap  = new TH2F("HitMap", "HitMap;X;Y", 1, 0, 1, 1, 0, 1);
         fRateGraph = new TGraph();
         fRateGraph->SetTitle("Rate;Time [s];Rate [Hz]");

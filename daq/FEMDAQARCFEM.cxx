@@ -238,7 +238,7 @@ void FEMDAQARCFEM::EventBuilder( ){
   uint32_t prevEvCount = 0;
   double prevEventTime = runStartTime;
   uint32_t ev_count = 0;
-  uint64_t ts = 0;
+  uint64_t ts = 0x0;
   uint64_t fileSize =0;
   
 
@@ -275,7 +275,7 @@ void FEMDAQARCFEM::EventBuilder( ){
 
       if(newEvent){//Save Event if closed
         sEvent.eventID = ev_count;
-        sEvent.timestamp =  (double) ts * 2E-8 + runStartTime;
+        sEvent.timestamp =  (double) ts * 2.E-8 + runStartTime;
         UpdateRate(sEvent.timestamp, prevEventTime, storedEvents, prevEvCount);
 
         if (file){
@@ -315,7 +315,7 @@ void FEMDAQARCFEM::EventBuilder( ){
              if (runConfig.verboseLevel >= RunConfig::Verbosity::Debug )std::cout<<"FEM "<<FEM.femID<<" Buffer size "<<FEM.buffer.size()<<std::endl;
            }
          tC++;
-         if(tC>=10000)break;
+         if(tC>=1000)break;
       }
     std::this_thread::sleep_for(std::chrono::milliseconds(5));
 

@@ -158,7 +158,7 @@ const double elapsed = eventTime - lastTimeSaved;
 void FEMDAQ::UpdateRate(const double eventTime, double &prevEventTime, const uint32_t evCount, uint32_t &prevEvCount){
 
 const double elapsed = eventTime - prevEventTime;
-if (elapsed < 10)return;
+if (elapsed < 5)return;
 
   char tmpstm[20]; //"YYYY-MM-DD HH:MM:SS" + \0
   std::time_t currentEvTime = static_cast<std::time_t>(eventTime);

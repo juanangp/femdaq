@@ -311,6 +311,12 @@ public:
     void NextEvent() {
         if (!fReader || !fChain) return;
 
+          if (fChain->GetTree()) {
+            fChain->GetTree()->Refresh();
+            fChain->GetTree()->SetTreeIndex(0); 
+          }
+
+
         fChain->SetEntries(-1); 
         Long64_t totalEntries = fChain->GetEntries();
 

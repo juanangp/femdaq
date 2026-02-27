@@ -48,6 +48,5 @@ public:
 
     std::deque<uint16_t> buffer;
 
-    inline static std::mutex mutex_socket;
     inline static std::mutex mutex_mem;
 };

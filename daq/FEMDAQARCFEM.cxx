@@ -59,9 +59,7 @@ void FEMDAQARCFEM::SendCommand(const char* cmd, bool wait){
 
 void FEMDAQARCFEM::SendCommand(const char* cmd, FEMProxy &FEM, bool wait){
 
-  FEM.mutex_socket.lock();
   const int e = sendto (FEM.client, cmd, strlen(cmd), 0, (struct sockaddr*)&(FEM.target), sizeof(struct sockaddr));
-  FEM.mutex_socket.unlock();
     if ( e == -1) {
       std::string error ="sendto failed: " + std::string(strerror(errno));
       throw std::runtime_error(error);
@@ -141,9 +139,7 @@ void FEMDAQARCFEM::Receiver( ){
         int length = 0;
         // protect socket operations
           {
-            FEM.mutex_socket.lock();
             length = recvfrom(FEM.client, buf_rcv, 8192, 0, (struct sockaddr*)&FEM.remote, &FEM.remote_size);
-            FEM.mutex_socket.unlock();
               if (length < 0) {
                 std::string error ="recvfrom failed: " + std::string(strerror(errno));
                 throw std::runtime_error(error);

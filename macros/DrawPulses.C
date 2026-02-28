@@ -29,7 +29,8 @@ cout<<"Entries "<<entries<<endl;
     std::vector<TH1S *> histos;
     chain->GetEntry(entryID);
     for(int i=0;i<4;i++){
-      auto h = new THStack( );
+      std::string sName = "ASIC" + std::to_string(i);
+      auto h = new THStack(sName.c_str(), sName.c_str());
       hs.emplace_back(h);
     }
 
@@ -46,7 +47,7 @@ cout<<"Entries "<<entries<<endl;
               histo->SetBinContent(p+1,pulse.at(p) );
             }
           short max = *std::max_element(pulse.begin(), pulse.end());
-          if(max > 500)std::cout<<"Card "<<card<<" channel "<<channel<<" max "<<max<<endl;
+          //if(max > 500)std::cout<<"Card "<<card<<" channel "<<channel<<" max "<<max<<endl;
           histo->SetLineColor(channel);
           histo->SetMarkerColor(channel);
           histos.emplace_back(histo);

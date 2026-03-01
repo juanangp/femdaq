@@ -2,15 +2,15 @@
 
 # We identify the thisroot.sh script for the corresponding ROOT version
 execute_process(
-    COMMAND root-config --prefix
-    WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
-    OUTPUT_VARIABLE ROOT_PATH)
+  COMMAND root-config --prefix
+  WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
+  OUTPUT_VARIABLE ROOT_PATH)
 string(REGEX REPLACE "\n$" "" ROOT_PATH "${ROOT_PATH}")
 set(thisROOT "${ROOT_PATH}/bin/thisroot.sh")
 
 # install thisREST script, sh VERSION
-install( CODE
-"
+install(
+  CODE "
 file( WRITE \${CMAKE_INSTALL_PREFIX}/thisFEMDAQ.sh
 \"\#!/bin/bash
 
@@ -47,5 +47,4 @@ alias FEMDAQRoot=\\\"FEMDaqRoot -l\\\"
 
 \"
 )
-        "
-)
+        ")

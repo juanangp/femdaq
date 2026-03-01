@@ -1,38 +1,37 @@
 #pragma once
 
-#include <vector>
+#include <algorithm>
+#include <iostream>
 #include <memory>
 #include <string>
-#include <iostream>
-#include <algorithm>
+#include <vector>
 
 class SignalEvent {
 public:
+  int eventID;
+  double timestamp = 0;
+  std::vector<int> signalsID;
+  std::vector<short> pulses;
 
-    int eventID;
-    double timestamp = 0;
-    std::vector<int> signalsID;
-    std::vector<short> pulses;
+  SignalEvent() = default;
+  ~SignalEvent() = default;
 
-    SignalEvent() = default;
-    ~SignalEvent() = default;
+  inline void AddSignal(int sID, const std::vector<short> &pulse) {
+    bool isSID = std::any_of(signalsID.begin(), signalsID.end(),
+                             [sID](const auto &s) { return s == sID; });
 
-    inline void AddSignal(int sID, const std::vector<short> &pulse){
-      bool isSID = std::any_of(signalsID.begin(), signalsID.end(),
-                       [sID](const auto& s){ return s == sID; });
-
-        if (isSID){
-          std::cout<<"Warning sID "<< sID<< " already exist for this event"<<std::endl;
-          return;
-        }
-
-      signalsID.emplace_back(sID);
-      pulses.insert(pulses.end(), pulse.begin(), pulse.end());
+    if (isSID) {
+      std::cout << "Warning sID " << sID << " already exist for this event"
+                << std::endl;
+      return;
     }
 
-    inline void Clear(){
-      signalsID.clear();
-      pulses.clear();
-    }
+    signalsID.emplace_back(sID);
+    pulses.insert(pulses.end(), pulse.begin(), pulse.end());
+  }
 
+  inline void Clear() {
+    signalsID.clear();
+    pulses.clear();
+  }
 };

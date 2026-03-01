@@ -1,11 +1,10 @@
 #include <TApplication.h>
 #include <TROOT.h>
 #include <TRint.h>
-#include <TSystem.h>
 #include <TStyle.h>
+#include <TSystem.h>
 
-
-int main(int argc, char* argv[]) {
+int main(int argc, char *argv[]) {
 
   printf("---------------------Wellcome to FEMDAQRoot--------------------\n");
 

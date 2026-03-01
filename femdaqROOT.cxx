@@ -12,7 +12,7 @@ int main(int argc, char* argv[]) {
   TRint theApp("App", &argc, argv);
   gSystem->Load("libfemdaq.so");
   gSystem->AddIncludePath(" -I$FEMDAQ_INCLUDE_PATH");
-  gROOT->ProcessLine(".L  $FEMDAQ_PATH/macros/DrawPulses.C");
+  gROOT->ProcessLine(".L  $FEMDAQ_PATH/macros/DrawPulses.C+");
   gROOT->ProcessLine(".L  $FEMDAQ_PATH/macros/AnalyzePulses.C");
   gROOT->ProcessLine(".L  $FEMDAQ_PATH/macros/EventDisplay.C+");
 

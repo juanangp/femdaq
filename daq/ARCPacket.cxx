@@ -233,7 +233,7 @@ void DataPacket_Print(uint16_t *fr, const uint16_t &size) {
       fr++;
       sz_rd++;
 
-      fr += HistoStat_Print(fr, sz_rd, r0);
+      HistoStat_Print(fr, sz_rd, r0);
 
     } else if ((*fr & PFX_0_BIT_CONTENT_MASK) == PFX_END_OF_FRAME) {
       printf("----- End of Frame -----\n");
@@ -249,20 +249,20 @@ void DataPacket_Print(uint16_t *fr, const uint16_t &size) {
         printf("Dead-time Histogram\n");
       else
         printf("Inter Event Time Histogram\n");
-      fr += 2;
-      sz_rd += 2;
+      fr++;
+      sz_rd++;
       // null word
-      fr += 2;
-      sz_rd += 2;
+      fr++;
+      sz_rd++;
 
-      fr += HistoStat_Print(fr, sz_rd, 0);
+      HistoStat_Print(fr, sz_rd, 0);
 
     } else if (*fr == PFX_PEDESTAL_HSTAT) {
       printf("\nPedestal Histogram Statistics\n");
       fr++;
       sz_rd++;
 
-      fr += HistoStat_Print(fr, sz_rd, 0);
+      HistoStat_Print(fr, sz_rd, 0);
 
     } else if (*fr == PFX_PEDESTAL_H_MD) {
       fr++;
@@ -304,7 +304,7 @@ void DataPacket_Print(uint16_t *fr, const uint16_t &size) {
 
       uint32_t tmp_i[9];
       for (int j = 0; j < 9; j++) {
-        tmp_i[j] = GetUInt32FromBuffer(fr, sz_rd);
+        tmp_i[j] = GetUInt32FromBuffer(fr, sz_rd, true);
       }
 
       printf("Server RX stat: cmd_count=%d daq_req=%d daq_timeout=%d "
@@ -325,7 +325,7 @@ void DataPacket_Print(uint16_t *fr, const uint16_t &size) {
     printf("Format error: read %d words but packet size is %d\n", sz_rd, size);
 }
 
-int HistoStat_Print(uint16_t *&fr, int &sz_rd, const uint16_t &hitCount) {
+void HistoStat_Print(uint16_t *&fr, int &sz_rd, const uint16_t &hitCount) {
 
   int length = sz_rd;
 
@@ -344,19 +344,29 @@ int HistoStat_Print(uint16_t *&fr, int &sz_rd, const uint16_t &hitCount) {
   for (int j = 0; j < hitCount; j++) {
     printf("Bin(%2d) = %9d\n", j, GetUInt32FromBuffer(fr, sz_rd));
   }
-
-  length -= sz_rd;
-  return length;
 }
 
-uint32_t GetUInt32FromBuffer(uint16_t *&fr, int &sz_rd) {
+uint32_t GetUInt32FromBuffer(uint16_t *&fr, int &sz_rd, bool BE) {
 
-  uint32_t res = *fr;
-  fr++;
-  sz_rd++;
-  res |= (*fr) << 16;
-  fr++;
-  sz_rd++;
+  uint32_t res = 0;
+
+  if (BE)
+    res = (static_cast<uint32_t>(fr[0]) << 16) | fr[1];
+  else
+    res = fr[0] | (static_cast<uint32_t>(fr[1]) << 16);
+
+  fr += 2;
+  sz_rd += 2;
+
+  return res;
+}
+
+uint32_t GetUInt32FromBufferBE(uint16_t *&fr, int &sz_rd) {
+
+  uint32_t res = (static_cast<uint32_t>(fr[0]) << 16) | fr[1];
+
+  fr += 2;
+  sz_rd += 4;
 
   return res;
 }

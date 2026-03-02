@@ -176,7 +176,7 @@ namespace FEMINOSPacket {
 
 void DataPacket_Print(uint16_t *fr, const uint16_t &size);
 void HistoStat_Print(uint16_t *&fr, int &sz_rd, const uint16_t &hitCount);
-uint32_t GetUInt32FromBuffer(uint16_t *&fr, int &sz_rd);
+uint32_t GetUInt32FromBuffer(uint16_t *&fr, int &sz_rd, bool BE = false);
 bool TryExtractNextEvent(std::deque<uint16_t> &buffer, size_t &idx,
                          std::deque<uint16_t> &out);
 void ParseEventFromWords(std::deque<uint16_t> &event, SignalEvent &sEvent,

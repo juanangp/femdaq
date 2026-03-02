@@ -234,7 +234,7 @@ void DataPacket_Print(uint16_t *fr, const uint16_t &size) {
 
       uint32_t tmp_i[9];
       for (int j = 0; j < 9; j++) {
-        tmp_i[j] = GetUInt32FromBuffer(fr, sz_rd);
+        tmp_i[j] = GetUInt32FromBuffer(fr, sz_rd, true);
       }
 
       printf("Server RX stat: cmd_count=%d daq_req=%d daq_timeout=%d "
@@ -274,14 +274,17 @@ void HistoStat_Print(uint16_t *&fr, int &sz_rd, const uint16_t &hitCount) {
   }
 }
 
-uint32_t GetUInt32FromBuffer(uint16_t *&fr, int &sz_rd) {
+uint32_t GetUInt32FromBuffer(uint16_t *&fr, int &sz_rd, bool BE) {
 
-  uint32_t res = *fr;
-  fr++;
-  sz_rd++;
-  res |= (*fr) << 16;
-  fr++;
-  sz_rd++;
+  uint32_t res = 0;
+
+  if (BE)
+    res = (static_cast<uint32_t>(fr[0]) << 16) | fr[1];
+  else
+    res = fr[0] | (static_cast<uint32_t>(fr[1]) << 16);
+
+  fr += 2;
+  sz_rd += 2;
 
   return res;
 }

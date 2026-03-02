@@ -229,19 +229,17 @@ void FEMDAQARCFEM::startDAQ(const std::vector<std::string> &flags) {
 
   while (!abrt && !stopRun) {
     SendCommand(daq_cmd, false);
-    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
   }
 }
 
 void FEMDAQARCFEM::stopDAQ() {
 
-  char daq_cmd[40];
   SendCommand("sca enable 0");
   runEndTime = getCurrentTime();
   std::this_thread::sleep_for(std::chrono::seconds(1));
 
-  sprintf(daq_cmd, "daq 0x000000 F\n");
-  SendCommand(daq_cmd, false);
+  SendCommand("daq 0x000000 F", false);
 
   stopEventBuilder = true;
   if (eventBuilderThread.joinable())

@@ -13,6 +13,7 @@ void signalHandler(int sig) {
 int main(int argc, char **argv) {
 
   std::string configFile = "";
+  std::string execFile = "";
   bool readOnly = false;
 
   CLI::App app{"fem-daq"};
@@ -20,6 +21,7 @@ int main(int argc, char **argv) {
   app.add_option("-c,--config-file", configFile, "Configuration file.")
       ->group("General");
   app.add_flag("--read-only", readOnly, ("Read-only mode"))->group("General");
+  app.add_option("-e,--exec", execFile, "Executable file.")->group("General");
 
   CLI11_PARSE(app, argc, argv);
 
@@ -39,5 +41,8 @@ int main(int argc, char **argv) {
 
   CommandFetcher cmdFetcher(runConfig);
 
-  cmdFetcher.runInteractive();
+  if (!execFile.empty())
+    cmdFetcher.execFile(execFile);
+  else
+    cmdFetcher.runInteractive();
 }

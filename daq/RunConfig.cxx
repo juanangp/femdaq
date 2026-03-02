@@ -29,6 +29,8 @@ void RunConfig::loadConfig() {
   nEvents = getOrDefault(run, "nEvents", nEvents);
   maxFileSize = getOrDefault(run, "maxFileSize", maxFileSize);
   fileSize = ParseSizeToBytes(maxFileSize);
+  maxTime = getOrDefault(run, "time", maxTime);
+  maxTimeSeconds = ParseTimeToSeconds(maxTime);
   electronics = getOrDefault(run, "electronics", electronics);
 
   if (verbose == "debug")
@@ -125,6 +127,39 @@ void RunConfig::UpdateInfo() {
   }
 
   std::cout << "--- Run Info updated successfully ---\n" << std::endl;
+}
+
+double RunConfig::ParseTimeToSeconds(const std::string &timeStr) {
+
+  std::string s = timeStr;
+
+  // Convert to lowercase to handle "Day", "WEEK", etc.
+  std::transform(s.begin(), s.end(), s.begin(), ::tolower);
+
+  // Extract the numeric part (everything before the first letter or space)
+  size_t firstLetter = s.find_first_not_of("0123456789. ");
+  if (firstLetter == std::string::npos)
+    return std::stod(s); // Assume seconds if no unit
+
+  double value = std::stod(s.substr(0, firstLetter));
+  std::string unit = s.substr(firstLetter);
+
+  // Multipliers to seconds
+  if (unit.find("w") == 0)
+    return value * 7 * 24 * 3600; // weeks, week, w
+  else if (unit.find("d") == 0)
+    return value * 24 * 3600; // days, day, d
+  else if (unit.find("h") == 0)
+    return value * 3600; // hours, hour, h
+  else if (unit.find("m") == 0)
+    return value * 60; // minutes, minute, m
+  else if (unit.find("s") == 0)
+    return value; // seconds, second, s
+  else
+    throw std::runtime_error("ParseTimeToSeconds: Unknown unit \"" + unit +
+                             "\"");
+
+  return value;
 }
 
 uint64_t RunConfig::ParseSizeToBytes(const std::string &sizeStr) {

@@ -9,6 +9,7 @@
 #include <TObjString.h>
 
 std::atomic<bool> FEMDAQ::abrt(false);
+std::atomic<bool> FEMDAQ::stopRun(false);
 
 FEMDAQ::FEMDAQ(RunConfig &rC) : runConfig(rC) {
 
@@ -160,8 +161,8 @@ void FEMDAQ::FillTree(const double eventTime, double &lastTimeSaved) {
   }
 }
 
-void FEMDAQ::UpdateRate(const double eventTime, double &prevEventTime,
-                        const uint32_t evCount, uint32_t &prevEvCount) {
+void FEMDAQ::UpdateRun(const double eventTime, double &prevEventTime,
+                       const uint32_t evCount, uint32_t &prevEvCount) {
 
   const double elapsed = eventTime - prevEventTime;
   if (elapsed < 5)
@@ -173,9 +174,17 @@ void FEMDAQ::UpdateRate(const double eventTime, double &prevEventTime,
   std::strftime(tmpstm, sizeof(tmpstm), "%Y-%m-%d %H:%M:%S",
                 std::localtime(&currentEvTime));
 
+  double runElapsedTime = currentEvTime - runStartTime;
+
   std::cout << tmpstm << " Total events: " << evCount
-            << " Rate: " << (evCount - prevEvCount) / elapsed << " Hz"
-            << std::endl;
+            << " Rate: " << (evCount - prevEvCount) / elapsed << " Hz "
+            << "Run time " << runElapsedTime / 3600. << " hours" << std::endl;
   prevEvCount = evCount;
   prevEventTime = eventTime;
+
+  if (runConfig.nEvents > 0 && storedEvents.load() >= runConfig.nEvents)
+    stopRun = true;
+  if (runConfig.maxTimeSeconds > 0 &&
+      runElapsedTime >= runConfig.maxTimeSeconds)
+    stopRun = true;
 }

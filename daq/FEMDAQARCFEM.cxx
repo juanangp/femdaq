@@ -217,17 +217,17 @@ void FEMDAQARCFEM::Receiver() {
 void FEMDAQARCFEM::startDAQ(const std::vector<std::string> &flags) {
 
   stopEventBuilder = false;
-  FEMDAQ::storedEvents = 0;
+  stopRun = false;
+  storedEvents = 0;
   eventBuilderThread = std::thread(&FEMDAQARCFEM::EventBuilder, this);
   std::this_thread::sleep_for(std::chrono::seconds(1));
   char daq_cmd[40];
-  runStartTime = FEMDAQ::getCurrentTime();
+  runStartTime = getCurrentTime();
   // First daq request, do not add sequence number
   const uint32_t reqCmd = 0xFF;
   sprintf(daq_cmd, "daq 0x%06x F", reqCmd);
 
-  while (!FEMDAQ::abrt && (runConfig.nEvents == 0 ||
-                           FEMDAQ::storedEvents.load() < runConfig.nEvents)) {
+  while (!abrt || !stopRun) {
     SendCommand(daq_cmd, false);
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
   }
@@ -237,7 +237,7 @@ void FEMDAQARCFEM::stopDAQ() {
 
   char daq_cmd[40];
   SendCommand("sca enable 0");
-  runEndTime = FEMDAQ::getCurrentTime();
+  runEndTime = getCurrentTime();
   std::this_thread::sleep_for(std::chrono::seconds(1));
 
   sprintf(daq_cmd, "daq 0x000000 F\n");
@@ -263,7 +263,7 @@ void FEMDAQARCFEM::EventBuilder() {
   std::string fileName = MakeFileName(baseName, fileIndex);
 
   if (!runConfig.readOnly) {
-    OpenRootFile(fileName, sEvent, FEMDAQ::getCurrentTime());
+    OpenRootFile(fileName, sEvent, getCurrentTime());
   }
 
   bool newEvent = true;
@@ -294,7 +294,7 @@ void FEMDAQARCFEM::EventBuilder() {
     if (newEvent) { // Save Event if closed
       sEvent.eventID = ev_count;
       sEvent.timestamp = (double)ts * 2.E-8 + runStartTime;
-      UpdateRate(sEvent.timestamp, prevEventTime, storedEvents, prevEvCount);
+      UpdateRun(sEvent.timestamp, prevEventTime, storedEvents, prevEvCount);
 
       if (file) {
         FillTree(sEvent.timestamp, lastTimeSaved);
@@ -324,7 +324,7 @@ void FEMDAQARCFEM::EventBuilder() {
       for (auto &FEM : FEMArray)
         FEM.pendingEvent = true;
 
-      ++FEMDAQ::storedEvents;
+      ++storedEvents;
       sEvent.Clear();
     }
 

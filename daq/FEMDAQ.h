@@ -28,6 +28,7 @@ public:
   }
 
   static std::atomic<bool> abrt;
+  static std::atomic<bool> stopRun;
   std::atomic<uint32_t> storedEvents{0};
 
   std::unique_ptr<TFile> file = nullptr;
@@ -37,13 +38,12 @@ public:
                     const double startTime);
   void CloseRootFile(const double endTime);
   void FillTree(const double eventTime, double &lastTimeSaved);
-  void UpdateRate(const double eventTime, double &prevEventTime,
-                  const uint32_t evCount, uint32_t &prevEvCount);
+  void UpdateRun(const double eventTime, double &prevEventTime,
+                 const uint32_t evCount, uint32_t &prevEvCount);
   void UpdateRunConfigInfo() { runConfig.UpdateInfo(); }
 
   bool isReadOnly() const { return runConfig.readOnly; }
 
-  static inline double lastEvTime = 0;
   static double getCurrentTime();
 
   std::string MakeBaseFileName();

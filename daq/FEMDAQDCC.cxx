@@ -68,10 +68,10 @@ void FEMDAQDCC::startDAQ(const std::vector<std::string> &flags) {
   }
 
   sEvent.Clear();
-  const double startTime = FEMDAQ::getCurrentTime();
-  double lastTimeSaved = startTime;
+  runStartTime = getCurrentTime();
+  double lastTimeSaved = runStartTime;
   uint32_t prevEvCount = 0;
-  double prevEventTime = startTime;
+  double prevEventTime = runStartTime;
   uint32_t ev_count = 0;
   uint64_t ts = 0;
   uint64_t fileSize = 0;
@@ -81,17 +81,17 @@ void FEMDAQDCC::startDAQ(const std::vector<std::string> &flags) {
   std::string fileName = MakeFileName(baseName, fileIndex);
 
   if (!runConfig.readOnly) {
-    OpenRootFile(fileName, sEvent, FEMDAQ::getCurrentTime());
+    OpenRootFile(fileName, sEvent, runStartTime);
   }
 
-  FEMDAQ::storedEvents = 0;
+  stopRun = false;
+  storedEvents = 0;
   int eventID = 0;
   auto &FEM = FEMArray.front();
   const auto &fecs = runConfig.fems.front().fecs;
   char cmd[200];
 
-  while (!FEMDAQ::abrt && (runConfig.nEvents == 0 ||
-                           FEMDAQ::storedEvents.load() < runConfig.nEvents)) {
+  while (!abrt || !stopRun) {
     // SendCommand("fem 0");
 
     SendCommand("isobus 0x6C", FEM); // SCA start
@@ -101,7 +101,7 @@ void FEMDAQDCC::startDAQ(const std::vector<std::string> &flags) {
     sEvent.eventID = eventID;
     waitForTrigger();
     // Perform data acquisition phase, compress, accept size
-    sEvent.timestamp = FEMDAQ::getCurrentTime();
+    sEvent.timestamp = getCurrentTime();
     for (auto fecID : fecs) {
       for (int a = 0; a < 4; a++) {
         sprintf(cmd, "areq %d %d %d %d %d", mode, fecID, a, 3, 78);
@@ -110,7 +110,7 @@ void FEMDAQDCC::startDAQ(const std::vector<std::string> &flags) {
       }
     }
 
-    UpdateRate(sEvent.timestamp, prevEventTime, eventID, prevEvCount);
+    UpdateRun(sEvent.timestamp, prevEventTime, eventID, prevEvCount);
     eventID++;
 
     if (sEvent.signalsID.size() == 0)
@@ -125,7 +125,7 @@ void FEMDAQDCC::startDAQ(const std::vector<std::string> &flags) {
 
       if (fileSize >= runConfig.fileSize) {
 
-        CloseRootFile(FEMDAQ::getCurrentTime());
+        CloseRootFile(sEvent.timestamp);
 
         fileIndex++;
         fileSize = 0;
@@ -135,16 +135,16 @@ void FEMDAQDCC::startDAQ(const std::vector<std::string> &flags) {
 
         std::cout << "New file " << fileName << " " << std::endl;
 
-        OpenRootFile(fileName, sEvent, FEMDAQ::getCurrentTime());
+        OpenRootFile(fileName, sEvent, sEvent.timestamp);
       }
     }
 
-    ++FEMDAQ::storedEvents;
+    ++storedEvents;
     sEvent.Clear();
   }
 
   if (file) {
-    CloseRootFile(FEMDAQ::getCurrentTime());
+    CloseRootFile(getCurrentTime());
   }
 
   std::cout << "End of DAQ " << storedEvents << " events acquired" << std::endl;

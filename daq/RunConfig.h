@@ -22,6 +22,7 @@ public:
   std::string type = "";
   std::string verbose = "info";
   int nEvents = 0;
+  std::string maxTime = "0s";
   std::string maxFileSize = "1Gb";
   std::string electronics = "";
   std::vector<FEM> fems;
@@ -30,6 +31,7 @@ public:
   std::map<std::string, std::string> runInfo;
 
   uint64_t fileSize = 1024ull * 1024ull * 1024ull;
+  double maxTimeSeconds = 0;
 
   Verbosity verboseLevel;
 
@@ -66,6 +68,7 @@ public:
   inline std::string GetFileName() const { return fileName; }
 
   static uint64_t ParseSizeToBytes(const std::string &sizeStr);
+  static double ParseTimeToSeconds(const std::string &timeStr);
 
   const std::string Dump() { return YAML::Dump(root); }
 

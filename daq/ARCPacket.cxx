@@ -64,8 +64,7 @@ void DataPacket_Print(uint16_t *fr, const uint16_t &size) {
       r0 = GET_LAT_HISTO_BIN(*fr);
       fr++;
       sz_rd++;
-      uint32_t tmp = GetUInt32FromBufferInv(fr, sz_rd);
-      fr += 2;
+      uint32_t tmp = GetUInt32FromBuffer(fr, sz_rd);
       printf("%03d %03d\n", r0, tmp);
     } else if ((*fr & PFX_11_BIT_CONTENT_MASK) == PFX_CHIP_LAST_CELL_READ_ARC) {
       r0 = GET_CHIP_IX_LCR(*fr);
@@ -207,8 +206,7 @@ void DataPacket_Print(uint16_t *fr, const uint16_t &size) {
       sz_rd++;
       printf("Time %" PRId64 "\n", ts);
 
-      uint32_t evC = GetUInt32FromBufferInv(fr, sz_rd);
-      fr += 2;
+      uint32_t evC = GetUInt32FromBuffer(fr, sz_rd);
       printf("Event_Count %d\n", evC);
 
     } else if ((*fr & PFX_6_BIT_CONTENT_MASK) == PFX_END_OF_EVENT_ARC) {
@@ -270,10 +268,8 @@ void DataPacket_Print(uint16_t *fr, const uint16_t &size) {
       fr++;
       sz_rd++;
 
-      uint32_t mean = GetUInt32FromBufferInv(fr, sz_rd);
-      fr += 2;
-      uint32_t std_dev = GetUInt32FromBufferInv(fr, sz_rd);
-      fr += 2;
+      uint32_t mean = GetUInt32FromBuffer(fr, sz_rd);
+      uint32_t std_dev = GetUInt32FromBuffer(fr, sz_rd);
       printf("Mean/Std_dev : %.2f  %.2f\n", (float)mean / 100.,
              (float)std_dev / 100.);
 
@@ -288,10 +284,8 @@ void DataPacket_Print(uint16_t *fr, const uint16_t &size) {
       r2 = GET_EXTD_CHAN_IX(*fr);
       fr++;
       sz_rd++;
-      uint32_t mean = GetUInt32FromBufferInv(fr, sz_rd);
-      fr += 2;
-      uint32_t std_dev = GetUInt32FromBufferInv(fr, sz_rd);
-      fr += 2;
+      uint32_t mean = GetUInt32FromBuffer(fr, sz_rd);
+      uint32_t std_dev = GetUInt32FromBuffer(fr, sz_rd);
       printf("Ped Card %02d Chip %01d Channel %02d Mean/Std_dev : %.2f  %.2f\n",
              r0, r1, r2, (float)mean / 100., (float)std_dev / 100.);
     } else if (*fr == PFX_SHISTO_BINS) {
@@ -311,7 +305,6 @@ void DataPacket_Print(uint16_t *fr, const uint16_t &size) {
       uint32_t tmp_i[9];
       for (int j = 0; j < 9; j++) {
         tmp_i[j] = GetUInt32FromBuffer(fr, sz_rd);
-        fr += 2;
       }
 
       printf("Server RX stat: cmd_count=%d daq_req=%d daq_timeout=%d "
@@ -332,53 +325,31 @@ void DataPacket_Print(uint16_t *fr, const uint16_t &size) {
     printf("Format error: read %d words but packet size is %d\n", sz_rd, size);
 }
 
-int HistoStat_Print(uint16_t *fr, int &sz_rd, const uint16_t &hitCount) {
+int HistoStat_Print(uint16_t *&fr, int &sz_rd, const uint16_t &hitCount) {
 
   int length = sz_rd;
 
   printf("Min Bin    : %d\n", GetUInt32FromBuffer(fr, sz_rd));
-  fr += 2;
   printf("Max Bin    : %d\n", GetUInt32FromBuffer(fr, sz_rd));
-  fr += 2;
   printf("Bin Width  : %d\n", GetUInt32FromBuffer(fr, sz_rd));
-  fr += 2;
   printf("Bin Count  : %d\n", GetUInt32FromBuffer(fr, sz_rd));
-  fr += 2;
   printf("Min Value  : %d\n", GetUInt32FromBuffer(fr, sz_rd));
-  fr += 2;
   printf("Max Value  : %d\n", GetUInt32FromBuffer(fr, sz_rd));
-  fr += 2;
   printf("Mean       : %.2f\n",
          ((float)GetUInt32FromBuffer(fr, sz_rd)) / 100.0);
-  fr += 2;
   printf("Std Dev    : %.2f\n",
          ((float)GetUInt32FromBuffer(fr, sz_rd)) / 100.0);
-  fr += 2;
   printf("Entries    : %d\n", GetUInt32FromBuffer(fr, sz_rd));
-  fr += 2;
   // Get all bins
   for (int j = 0; j < hitCount; j++) {
     printf("Bin(%2d) = %9d\n", j, GetUInt32FromBuffer(fr, sz_rd));
-    fr += 2;
   }
 
   length -= sz_rd;
   return length;
 }
 
-uint32_t GetUInt32FromBuffer(uint16_t *fr, int &sz_rd) {
-
-  uint32_t res = (*fr) << 16;
-  fr++;
-  sz_rd++;
-  res |= *fr;
-  fr++;
-  sz_rd++;
-
-  return res;
-}
-
-uint32_t GetUInt32FromBufferInv(uint16_t *fr, int &sz_rd) {
+uint32_t GetUInt32FromBuffer(uint16_t *&fr, int &sz_rd) {
 
   uint32_t res = *fr;
   fr++;

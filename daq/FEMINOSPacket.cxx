@@ -191,11 +191,11 @@ void DataPacket_Print(uint16_t *fr, const uint16_t &size) {
         printf("Dead-time Histogram\n");
       else
         printf("Inter Event Time Histogram\n");
-      fr++;
-      sz_rd++;
+      fr += 2;
+      sz_rd += 2;
       // null word
-      fr++;
-      sz_rd++;
+      fr += 2;
+      sz_rd += 2;
 
       fr += HistoStat_Print(fr, sz_rd, 0);
 

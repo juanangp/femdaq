@@ -219,10 +219,10 @@ void FEMDAQARCFEM::startDAQ(const std::vector<std::string> &flags) {
   stopEventBuilder = false;
   stopRun = false;
   storedEvents = 0;
+  runStartTime = getCurrentTime();
   eventBuilderThread = std::thread(&FEMDAQARCFEM::EventBuilder, this);
   std::this_thread::sleep_for(std::chrono::seconds(1));
   char daq_cmd[40];
-  runStartTime = getCurrentTime();
   // First daq request, do not add sequence number
   const uint32_t reqCmd = 0xFF;
   sprintf(daq_cmd, "daq 0x%06x F", reqCmd);

@@ -71,6 +71,34 @@ double FEMDAQ::getCurrentTime() {
          1000000.0;
 }
 
+std::string FEMDAQ::FormatElapsedTime(const double seconds) {
+
+  double value;
+  const char *unit;
+
+  if (seconds >= 604800) { // 1 week
+    value = seconds / 604800.0;
+    unit = " weeks";
+  } else if (seconds >= 86400) { // 1 day
+    value = seconds / 86400.0;
+    unit = " days";
+  } else if (seconds >= 3600) { // 1 hour
+    value = seconds / 3600.0;
+    unit = " hours";
+  } else if (seconds >= 60) {
+    value = seconds / 60.0;
+    unit = " minutes";
+  } else {
+    value = seconds;
+    unit = " seconds";
+  }
+
+  char timeStr[32];
+  int len = std::snprintf(timeStr, sizeof(timeStr), "%.2f", value);
+
+  return std::string(timeStr, len) + unit;
+}
+
 void FEMDAQ::setActiveFEM(const std::string &FEMID) {
 
   if (FEMID == "*") {
@@ -178,7 +206,7 @@ void FEMDAQ::UpdateRun(const double eventTime, double &prevEventTime,
 
   std::cout << tmpstm << " Total events: " << evCount
             << " Rate: " << (evCount - prevEvCount) / elapsed << " Hz "
-            << "Run time " << runElapsedTime / 3600. << " hours" << std::endl;
+            << "Run time " << FormatElapsedTime(runElapsedTime) << std::endl;
   prevEvCount = evCount;
   prevEventTime = eventTime;
 

@@ -227,7 +227,7 @@ void FEMDAQARCFEM::startDAQ(const std::vector<std::string> &flags) {
   const uint32_t reqCmd = 0xFF;
   sprintf(daq_cmd, "daq 0x%06x F", reqCmd);
 
-  while (!abrt || !stopRun) {
+  while (!abrt && !stopRun) {
     SendCommand(daq_cmd, false);
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
   }

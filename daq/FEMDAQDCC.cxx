@@ -91,7 +91,7 @@ void FEMDAQDCC::startDAQ(const std::vector<std::string> &flags) {
   const auto &fecs = runConfig.fems.front().fecs;
   char cmd[200];
 
-  while (!abrt || !stopRun) {
+  while (!abrt && !stopRun) {
     // SendCommand("fem 0");
 
     SendCommand("isobus 0x6C", FEM); // SCA start

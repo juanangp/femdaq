@@ -45,6 +45,7 @@ public:
   bool isReadOnly() const { return runConfig.readOnly; }
 
   static double getCurrentTime();
+  static std::string FormatElapsedTime(const double seconds);
 
   std::string MakeBaseFileName();
   std::string MakeFileName(const std::string &base, int index);

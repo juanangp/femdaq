@@ -6,19 +6,19 @@
 
 namespace FEMINOSPacket {
 
-void DataPacket_Print(uint16_t *fr, const uint16_t &size) {
+void DataPacket_Print(uint16_t *fr, const uint16_t &size, FILE *fp) {
 
   int sz_rd = 0, si = 0;
   uint16_t r0, r1, r2, r3;
 
-  printf("Frame size %d bytes\n", size * 2);
+  fprintf(fp, "Frame size %d bytes\n", size * 2);
 
   do {
     if ((*fr & PFX_14_BIT_CONTENT_MASK) == PFX_CARD_CHIP_CHAN_HIT_IX) {
       r0 = GET_CARD_IX(*fr);
       r1 = GET_CHIP_IX(*fr);
       r2 = GET_CHAN_IX(*fr);
-      printf("Card %02d Chip %01d Channel %02d\n", r0, r1, r2);
+      fprintf(fp, "Card %02d Chip %01d Channel %02d\n", r0, r1, r2);
       fr++;
       sz_rd++;
       si = 0;
@@ -26,19 +26,19 @@ void DataPacket_Print(uint16_t *fr, const uint16_t &size) {
       r0 = GET_CARD_IX(*fr);
       r1 = GET_CHIP_IX(*fr);
       r2 = GET_CHAN_IX(*fr);
-      printf("Card %02d Chip %01d Channel_Hit_Count %02d\n", r0, r1, r2);
+      fprintf(fp, "Card %02d Chip %01d Channel_Hit_Count %02d\n", r0, r1, r2);
       fr++;
       sz_rd++;
     } else if ((*fr & PFX_14_BIT_CONTENT_MASK) == PFX_CARD_CHIP_CHAN_HISTO) {
       r0 = GET_CARD_IX(*fr);
       r1 = GET_CHIP_IX(*fr);
       r2 = GET_CHAN_IX(*fr);
-      printf("Card %02d Chip %01d Channel_Histo_Index %02d\n", r0, r1, r2);
+      fprintf(fp, "Card %02d Chip %01d Channel_Histo_Index %02d\n", r0, r1, r2);
       fr++;
       sz_rd++;
     } else if ((*fr & PFX_12_BIT_CONTENT_MASK) == PFX_ADC_SAMPLE) {
       r0 = GET_ADC_DATA(*fr);
-      printf("%03d 0x%04x (%4d)\n", si, r0, r0);
+      fprintf(fp, "%03d 0x%04x (%4d)\n", si, r0, r0);
       fr++;
       sz_rd++;
       si++;
@@ -47,18 +47,18 @@ void DataPacket_Print(uint16_t *fr, const uint16_t &size) {
       fr++;
       sz_rd++;
       uint32_t tmp = GetUInt32FromBuffer(fr, sz_rd);
-      printf("%03d %03d\n", r0, tmp);
+      fprintf(fp, "%03d %03d\n", r0, tmp);
     } else if ((*fr & PFX_12_BIT_CONTENT_MASK) == PFX_CHIP_LAST_CELL_READ) {
       for (int i = 0; i < 4; i++) {
-        printf("Chip %01d Last_Cell_Read %03d (0x%03x)\n",
-               GET_LST_READ_CELL_CHIP_IX(*fr), GET_LST_READ_CELL(*fr),
-               GET_LST_READ_CELL(*fr));
+        fprintf(fp, "Chip %01d Last_Cell_Read %03d (0x%03x)\n",
+                GET_LST_READ_CELL_CHIP_IX(*fr), GET_LST_READ_CELL(*fr),
+                GET_LST_READ_CELL(*fr));
         fr++;
         sz_rd++;
       }
     } else if ((*fr & PFX_9_BIT_CONTENT_MASK) == PFX_TIME_BIN_IX) {
       r0 = GET_TIME_BIN(*fr);
-      printf("Time_Bin: %d\n", r0);
+      fprintf(fp, "Time_Bin: %d\n", r0);
       fr++;
       sz_rd++;
       si = 0;
@@ -66,7 +66,7 @@ void DataPacket_Print(uint16_t *fr, const uint16_t &size) {
       r0 = GET_HISTO_BIN(*fr);
       fr++;
       sz_rd++;
-      printf("Bin %3d Val %5d\n", r0, *fr);
+      fprintf(fp, "Bin %3d Val %5d\n", r0, *fr);
       fr++;
       sz_rd++;
     } else if ((*fr & PFX_9_BIT_CONTENT_MASK) == PFX_PEDTHR_LIST) {
@@ -78,11 +78,11 @@ void DataPacket_Print(uint16_t *fr, const uint16_t &size) {
       sz_rd++;
 
       if (r3 == 0) { // pedestal entry
-        printf("# Pedestal List for FEM %02d ASIC %01d\n", r0, r1);
+        fprintf(fp, "# Pedestal List for FEM %02d ASIC %01d\n", r0, r1);
       } else {
-        printf("# Threshold List for FEM %02d ASIC %01d\n", r0, r1);
+        fprintf(fp, "# Threshold List for FEM %02d ASIC %01d\n", r0, r1);
       }
-      printf("fem %02d\n", r0);
+      fprintf(fp, "fem %02d\n", r0);
       if (r2 == 0) { // AGET
         r2 = 71;
       } else {
@@ -91,10 +91,10 @@ void DataPacket_Print(uint16_t *fr, const uint16_t &size) {
 
       for (int j = 0; j <= r2; j++) {
         if (r3 == 0)
-          printf("ped ");
+          fprintf(fp, "ped ");
         else
-          printf("thr ");
-        printf("%1d %2d 0x%04x (%4d)\n", r1, j, *fr, *fr);
+          fprintf(fp, "thr ");
+        fprintf(fp, "%1d %2d 0x%04x (%4d)\n", r1, j, *fr, *fr);
         fr++;
         sz_rd++;
       }
@@ -103,8 +103,8 @@ void DataPacket_Print(uint16_t *fr, const uint16_t &size) {
       r1 = GET_FEMID(*fr);
       fr++;
       sz_rd++;
-      printf("--- Start of Data Frame (V.%01d) FEM %02d --\n", r0, r1);
-      printf("Filled with %d bytes\n", *fr);
+      fprintf(fp, "--- Start of Data Frame (V.%01d) FEM %02d --\n", r0, r1);
+      fprintf(fp, "Filled with %d bytes\n", *fr);
       fr++;
       sz_rd++;
     } else if ((*fr & PFX_9_BIT_CONTENT_MASK) == PFX_START_OF_MFRAME) {
@@ -112,8 +112,8 @@ void DataPacket_Print(uint16_t *fr, const uint16_t &size) {
       r1 = GET_FEMID(*fr);
       fr++;
       sz_rd++;
-      printf("--- Start of Moni Frame (V.%01d) FEM %02d --\n", r0, r1);
-      printf("Filled with %d bytes\n", *fr);
+      fprintf(fp, "--- Start of Moni Frame (V.%01d) FEM %02d --\n", r0, r1);
+      fprintf(fp, "Filled with %d bytes\n", *fr);
       fr++;
       sz_rd++;
     } else if ((*fr & PFX_9_BIT_CONTENT_MASK) == PFX_START_OF_CFRAME) {
@@ -121,17 +121,17 @@ void DataPacket_Print(uint16_t *fr, const uint16_t &size) {
       r1 = GET_FEMID(*fr);
       fr++;
       sz_rd++;
-      printf("--- Start of Config Frame (V.%01d) FEM %02d --\n", r0, r1);
-      printf("Error code: %d\n", *((short *)fr));
+      fprintf(fp, "--- Start of Config Frame (V.%01d) FEM %02d --\n", r0, r1);
+      fprintf(fp, "Error code: %d\n", *((short *)fr));
       fr++;
       sz_rd++;
     } else if ((*fr & PFX_8_BIT_CONTENT_MASK) == PFX_ASCII_MSG_LEN) {
       r0 = GET_ASCII_LEN(*fr);
       fr++;
       sz_rd++;
-      printf("ASCII Msg length: %d\n", r0);
+      fprintf(fp, "ASCII Msg length: %d\n", r0);
       for (int j = 0; j < r0 / 2; j++) {
-        printf("%c%c", ((*fr) & 0xFF), ((*fr) >> 8));
+        fprintf(fp, "%c%c", ((*fr) & 0xFF), ((*fr) >> 8));
         fr++;
         sz_rd++;
       }
@@ -141,7 +141,7 @@ void DataPacket_Print(uint16_t *fr, const uint16_t &size) {
       }
     } else if ((*fr & PFX_4_BIT_CONTENT_MASK) == PFX_START_OF_EVENT) {
       r0 = GET_EVENT_TYPE(*fr);
-      printf("-- Start of Event (Type %01d) --\n", r0);
+      fprintf(fp, "-- Start of Event (Type %01d) --\n", r0);
       fr++;
       sz_rd++;
       uint64_t ts = *fr;
@@ -153,10 +153,10 @@ void DataPacket_Print(uint16_t *fr, const uint16_t &size) {
       ts |= ((*fr) << 24);
       fr++;
       sz_rd++;
-      printf("Time %" PRId64 "\n", ts);
+      fprintf(fp, "Time %" PRId64 "\n", ts);
 
       uint32_t evC = GetUInt32FromBuffer(fr, sz_rd);
-      printf("Event_Count %d\n", evC);
+      fprintf(fp, "Event_Count %d\n", evC);
 
     } else if ((*fr & PFX_4_BIT_CONTENT_MASK) == PFX_END_OF_EVENT) {
       uint32_t size_ev = ((GET_EOE_SIZE(*fr)) << 16) & 0xFFFF0000;
@@ -165,46 +165,46 @@ void DataPacket_Print(uint16_t *fr, const uint16_t &size) {
       size_ev |= *fr & 0xFFFF;
       fr++;
       sz_rd++;
-      printf("----- End of Event ----- (size %d bytes)\n", size);
+      fprintf(fp, "----- End of Event ----- (size %d bytes)\n", size);
     } else if ((*fr & PFX_2_BIT_CONTENT_MASK) == PFX_CH_HIT_CNT_HISTO) {
       r0 = GET_CH_HIT_CNT_HISTO_CHIP_IX(*fr);
-      printf("Channel Hit Count Histogram (ASIC %d)\n", r0);
+      fprintf(fp, "Channel Hit Count Histogram (ASIC %d)\n", r0);
       fr++;
       sz_rd++;
       // null word
       fr++;
       sz_rd++;
 
-      HistoStat_Print(fr, sz_rd, r0);
+      HistoStat_Print(fr, sz_rd, fp, true);
 
     } else if ((*fr & PFX_0_BIT_CONTENT_MASK) == PFX_END_OF_FRAME) {
-      printf("----- End of Frame -----\n");
+      fprintf(fp, "----- End of Frame -----\n");
       fr++;
       sz_rd++;
     } else if (*fr == PFX_NULL_CONTENT) {
-      printf("null word (2 bytes)\n");
+      fprintf(fp, "null word (2 bytes)\n");
       fr++;
       sz_rd++;
     } else if ((*fr == PFX_DEADTIME_HSTAT_BINS) ||
                (*fr == PFX_EVPERIOD_HSTAT_BINS)) {
       if (*fr == PFX_DEADTIME_HSTAT_BINS)
-        printf("Dead-time Histogram\n");
+        fprintf(fp, "Dead-time Histogram\n");
       else
-        printf("Inter Event Time Histogram\n");
+        fprintf(fp, "Inter Event Time Histogram\n");
       fr++;
       sz_rd++;
       // null word
       fr++;
       sz_rd++;
 
-      HistoStat_Print(fr, sz_rd, 0);
+      HistoStat_Print(fr, sz_rd, fp);
 
     } else if (*fr == PFX_PEDESTAL_HSTAT) {
-      printf("\nPedestal Histogram Statistics\n");
+      fprintf(fp, "\nPedestal Histogram Statistics\n");
       fr++;
       sz_rd++;
 
-      HistoStat_Print(fr, sz_rd, 0);
+      HistoStat_Print(fr, sz_rd, fp);
 
     } else if (*fr == PFX_PEDESTAL_H_MD) {
       fr++;
@@ -212,22 +212,22 @@ void DataPacket_Print(uint16_t *fr, const uint16_t &size) {
 
       uint32_t mean = GetUInt32FromBuffer(fr, sz_rd);
       uint32_t std_dev = GetUInt32FromBuffer(fr, sz_rd);
-      printf("Mean/Std_dev : %.2f  %.2f\n", (float)mean / 100.,
-             (float)std_dev / 100.);
+      fprintf(fp, "Mean/Std_dev : %.2f  %.2f\n", (float)mean / 100.,
+              (float)std_dev / 100.);
 
       fr++;
       sz_rd++;
 
     } else if (*fr == PFX_SHISTO_BINS) {
-      printf("Threshold Turn-on curve\n");
+      fprintf(fp, "Threshold Turn-on curve\n");
       fr++;
       sz_rd++;
       for (int j = 0; j < 16; j++) {
-        printf("%d ", *fr);
+        fprintf(fp, "%d ", *fr);
         fr++;
         sz_rd++;
       }
-      printf("\n\n");
+      fprintf(fp, "\n\n");
     } else if (*fr == PFX_CMD_STATISTICS) {
       fr++;
       sz_rd++;
@@ -237,14 +237,16 @@ void DataPacket_Print(uint16_t *fr, const uint16_t &size) {
         tmp_i[j] = GetUInt32FromBuffer(fr, sz_rd, true);
       }
 
-      printf("Server RX stat: cmd_count=%d daq_req=%d daq_timeout=%d "
-             "daq_delayed=%d daq_missing=%d cmd_errors=%d\n",
-             tmp_i[0], tmp_i[1], tmp_i[2], tmp_i[3], tmp_i[4], tmp_i[5]);
-      printf("Server TX stat: cmd_replies=%d daq_replies=%d "
-             "daq_replies_resent=%d\n",
-             tmp_i[6], tmp_i[7], tmp_i[8]);
+      fprintf(fp,
+              "Server RX stat: cmd_count=%d daq_req=%d daq_timeout=%d "
+              "daq_delayed=%d daq_missing=%d cmd_errors=%d\n",
+              tmp_i[0], tmp_i[1], tmp_i[2], tmp_i[3], tmp_i[4], tmp_i[5]);
+      fprintf(fp,
+              "Server TX stat: cmd_replies=%d daq_replies=%d "
+              "daq_replies_resent=%d\n",
+              tmp_i[6], tmp_i[7], tmp_i[8]);
     } else { // No interpretable data
-      printf("word(%04d) : 0x%x (%d) unknown data\n", sz_rd, *fr, *fr);
+      fprintf(fp, "word(%04d) : 0x%x (%d) unknown data\n", sz_rd, *fr, *fr);
       fr++;
       sz_rd++;
     }
@@ -252,25 +254,27 @@ void DataPacket_Print(uint16_t *fr, const uint16_t &size) {
   } while (sz_rd < size);
 
   if (sz_rd > size)
-    printf("Format error: read %d words but packet size is %d\n", sz_rd, size);
+    fprintf(fp, "Format error: read %d words but packet size is %d\n", sz_rd,
+            size);
 }
 
-void HistoStat_Print(uint16_t *&fr, int &sz_rd, const uint16_t &hitCount) {
+void HistoStat_Print(uint16_t *&fr, int &sz_rd, FILE *fp, bool useBinCount) {
 
-  printf("Min Bin    : %d\n", GetUInt32FromBuffer(fr, sz_rd));
-  printf("Max Bin    : %d\n", GetUInt32FromBuffer(fr, sz_rd));
-  printf("Bin Width  : %d\n", GetUInt32FromBuffer(fr, sz_rd));
-  printf("Bin Count  : %d\n", GetUInt32FromBuffer(fr, sz_rd));
-  printf("Min Value  : %d\n", GetUInt32FromBuffer(fr, sz_rd));
-  printf("Max Value  : %d\n", GetUInt32FromBuffer(fr, sz_rd));
-  printf("Mean       : %.2f\n",
-         ((float)GetUInt32FromBuffer(fr, sz_rd)) / 100.0);
-  printf("Std Dev    : %.2f\n",
-         ((float)GetUInt32FromBuffer(fr, sz_rd)) / 100.0);
-  printf("Entries    : %d\n", GetUInt32FromBuffer(fr, sz_rd));
+  fprintf(fp, "Min Bin    : %d\n", GetUInt32FromBuffer(fr, sz_rd));
+  fprintf(fp, "Max Bin    : %d\n", GetUInt32FromBuffer(fr, sz_rd));
+  fprintf(fp, "Bin Width  : %d\n", GetUInt32FromBuffer(fr, sz_rd));
+  uint32_t binCount = GetUInt32FromBuffer(fr, sz_rd);
+  fprintf(fp, "Bin Count  : %d\n", binCount);
+  fprintf(fp, "Min Value  : %d\n", GetUInt32FromBuffer(fr, sz_rd));
+  fprintf(fp, "Max Value  : %d\n", GetUInt32FromBuffer(fr, sz_rd));
+  fprintf(fp, "Mean       : %.2f\n",
+          ((float)GetUInt32FromBuffer(fr, sz_rd)) / 100.0);
+  fprintf(fp, "Std Dev    : %.2f\n",
+          ((float)GetUInt32FromBuffer(fr, sz_rd)) / 100.0);
+  fprintf(fp, "Entries    : %d\n", GetUInt32FromBuffer(fr, sz_rd));
   // Get all bins
-  for (int j = 0; j < hitCount; j++) {
-    printf("Bin(%2d) = %9d\n", j, GetUInt32FromBuffer(fr, sz_rd));
+  for (int j = 0; j < binCount; j++) {
+    fprintf(fp, "Bin(%2d) = %9d\n", j, GetUInt32FromBuffer(fr, sz_rd));
   }
 }
 

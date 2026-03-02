@@ -191,7 +191,7 @@ void FEMDAQARCFEM::Receiver() {
         // FEM.mutex_mem.unlock();
         if (runConfig.verboseLevel >= RunConfig::Verbosity::Info) {
           std::cout << "FEM " << FEM.femID << " MONI PACKET" << std::endl;
-          packetAPI.DataPacket_Print(&buf_rcv[1], size - 1);
+          packetAPI.DataPacket_Print(&buf_rcv[1], size - 1, stdout);
         }
       } else {
         const short errorCode = buf_rcv[2];
@@ -202,7 +202,7 @@ void FEMDAQARCFEM::Receiver() {
           else
             std::cout << "FEM " << FEM.femID << " DEBUG PACKET REPLY"
                       << std::endl;
-          packetAPI.DataPacket_Print(&buf_rcv[1], size - 1);
+          packetAPI.DataPacket_Print(&buf_rcv[1], size - 1, stdout);
         }
         // std::cout<<"Frame is neither data or monitoring Val
         // 0x"<<std::hex<<buf_rcv[1]<<std::dec<<std::endl;
@@ -235,11 +235,11 @@ void FEMDAQARCFEM::startDAQ(const std::vector<std::string> &flags) {
 
 void FEMDAQARCFEM::stopDAQ() {
 
+  SendCommand("daq 0x000000 F", false);
+
   SendCommand("sca enable 0");
   runEndTime = getCurrentTime();
   std::this_thread::sleep_for(std::chrono::seconds(1));
-
-  SendCommand("daq 0x000000 F", false);
 
   stopEventBuilder = true;
   if (eventBuilderThread.joinable())

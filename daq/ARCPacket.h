@@ -197,9 +197,10 @@ namespace ARCPacket {
 // enum class packetReply { ERROR = -1, RETRY = 0, OK = 1 };
 // enum class packetType { ASCII = 0, BINARY = 1 };
 
-void DataPacket_Print(uint16_t *fr, const uint16_t &size);
-void HistoStat_Print(uint16_t *&fr, int &sz_rd, const uint16_t &hitCount);
+void DataPacket_Print(uint16_t *fr, const uint16_t &size, FILE *fp = stdout);
 uint32_t GetUInt32FromBuffer(uint16_t *&fr, int &sz_rd, bool BE = false);
+void HistoStat_Print(uint16_t *&fr, int &sz_rd, FILE *fp,
+                     bool useBinCount = false);
 bool TryExtractNextEvent(std::deque<uint16_t> &buffer, size_t &idx,
                          std::deque<uint16_t> &out);
 void ParseEventFromWords(std::deque<uint16_t> &event, SignalEvent &sEvent,

@@ -11,7 +11,7 @@ public:
                                 std::deque<uint16_t> &);
     void (*ParseEventFromWords)(std::deque<uint16_t> &, SignalEvent &,
                                 uint64_t &, uint32_t &);
-    void (*DataPacket_Print)(uint16_t *, const uint16_t &);
+    void (*DataPacket_Print)(uint16_t *, const uint16_t &, FILE *);
   };
 
   PacketAPI packetAPI;

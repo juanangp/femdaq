@@ -84,13 +84,13 @@ void FEMDAQARCFEM::waitForCmd(FEMProxy &FEM) {
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
     condition = (FEM.cmd_sent > FEM.cmd_rcv);
     timeout++;
-  } while (condition && timeout < 500);
+  } while (condition && timeout < 1000);
 
   if (runConfig.verboseLevel >= RunConfig::Verbosity::Debug)
     std::cout << "FEM " << FEM.femID << " Cmd sent " << FEM.cmd_sent
               << " Cmd Received: " << FEM.cmd_rcv << std::endl;
 
-  if (timeout >= 500) {
+  if (timeout >= 1000) {
     std::cout << "FEM " << FEM.femID << " Command timeout " << timeout
               << " Cmd sent " << FEM.cmd_sent
               << " Cmd Received: " << FEM.cmd_rcv << std::endl;
@@ -225,7 +225,7 @@ void FEMDAQARCFEM::startDAQ(const std::vector<std::string> &flags) {
   char daq_cmd[40];
   // First daq request, do not add sequence number
   const uint32_t reqCmd = 0xFF;
-  sprintf(daq_cmd, "daq 0x%06x F", reqCmd);
+  sprintf(daq_cmd, "daq 0x%06x F\n", reqCmd);
 
   while (!abrt && !stopRun) {
     SendCommand(daq_cmd, false);
@@ -235,7 +235,7 @@ void FEMDAQARCFEM::startDAQ(const std::vector<std::string> &flags) {
 
 void FEMDAQARCFEM::stopDAQ() {
 
-  SendCommand("daq 0x000000 F", false);
+  SendCommand("daq 0x000000 F\n", false);
 
   SendCommand("sca enable 0");
   runEndTime = getCurrentTime();

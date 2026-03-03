@@ -51,5 +51,5 @@ public:
 
   std::string monitoringLog;
 
-  inline static std::mutex mutex_mem;
+  std::mutex mutex_mem;
 };

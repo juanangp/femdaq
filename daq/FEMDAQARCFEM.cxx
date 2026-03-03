@@ -84,24 +84,20 @@ void FEMDAQARCFEM::SendCommand(const char *cmd, FEMProxy &FEM, bool wait) {
 
 void FEMDAQARCFEM::waitForCmd(FEMProxy &FEM) {
 
-  int timeout = 0;
-  bool condition = false;
+  auto start = std::chrono::steady_clock::now();
 
-  do {
+  while (FEM.cmd_rcv < FEM.cmd_sent) {
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    condition = (FEM.cmd_sent > FEM.cmd_rcv);
-    timeout++;
-  } while (condition && timeout < 1000);
 
-  if (runConfig.verboseLevel >= RunConfig::Verbosity::Debug)
-    std::cout << "FEM " << FEM.femID << " Cmd sent " << FEM.cmd_sent
-              << " Cmd Received: " << FEM.cmd_rcv << std::endl;
-
-  if (timeout >= 1000) {
-    std::cout << "FEM " << FEM.femID << " Command timeout " << timeout
-              << " Cmd sent " << FEM.cmd_sent
-              << " Cmd Received: " << FEM.cmd_rcv << std::endl;
-    throw std::runtime_error("Command timeout");
+    auto now = std::chrono::steady_clock::now();
+    // 10 seconds timeout
+    if (std::chrono::duration_cast<std::chrono::seconds>(now - start).count() >
+        10) {
+      throw std::runtime_error("Timeout waiting for FEM " +
+                               std::to_string(FEM.femID) + " response");
+    }
+    if (stopReceiver)
+      break;
   }
 }
 

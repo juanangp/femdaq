@@ -38,14 +38,21 @@ FEMDAQARCFEM::FEMDAQARCFEM(RunConfig &rC) : FEMDAQ(rC) {
     throw std::runtime_error("Unknown electronics type in config!");
   }
 
-  receiveThread = std::thread(&FEMDAQARCFEM::Receiver, this);
+  std::vector<std::thread> threads;
+
+  for (auto &FEM : FEMArray) {
+    receiverThreads.emplace_back(&FEMDAQARCFEM::FEMReceiverThread, this,
+                                 std::ref(FEM));
+  }
 }
 
 FEMDAQARCFEM::~FEMDAQARCFEM() {
 
   stopReceiver = true;
-  if (receiveThread.joinable())
-    receiveThread.join();
+  for (auto &t : receiverThreads) {
+    if (t.joinable())
+      t.join();
+  }
 }
 
 void FEMDAQARCFEM::SendCommand(const char *cmd, bool wait) {
@@ -98,120 +105,63 @@ void FEMDAQARCFEM::waitForCmd(FEMProxy &FEM) {
   }
 }
 
-void FEMDAQARCFEM::Receiver() {
+void FEMDAQARCFEM::FEMReceiverThread(FEMProxy &FEM) {
 
-  fd_set readfds, writefds, exceptfds, readfds_work;
-  struct timeval t_timeout;
-  t_timeout.tv_sec = 5;
-  t_timeout.tv_usec = 0;
-
-  // Build the socket descriptor set from which we want to read
-  FD_ZERO(&readfds);
-  FD_ZERO(&writefds);
-  FD_ZERO(&exceptfds);
-
-  int smax = 0;
-  for (auto &FEM : FEMArray) {
-    FD_SET(FEM.client, &readfds);
-    if (FEM.client > smax)
-      smax = FEM.client;
-  }
-  smax++;
-  int err = 0;
+  uint16_t buf_rcv[8192 / sizeof(uint16_t)];
   const size_t offset = (runConfig.electronics == "FEMINOS") ? 1 : 0;
 
   while (!stopReceiver) {
 
-    // Copy the read fds from what we computed outside of the loop
-    readfds_work = readfds;
+    int length = recvfrom(FEM.client, buf_rcv, 8192, 0,
+                          (struct sockaddr *)&FEM.remote, &FEM.remote_size);
 
-    // Wait for any of these sockets to be ready
-    if ((err = select(smax, &readfds_work, &writefds, &exceptfds, &t_timeout)) <
-        0) {
-      std::string error = "select failed: " + std::string(strerror(errno));
-      throw std::runtime_error(error);
+    if (length < 0) {
+      if (stopReceiver)
+        break;
+      if (errno == EWOULDBLOCK || errno == EAGAIN) {
+        continue;
+      } else {
+        std::string error = "FEM" + std::to_string(FEM.femID) +
+                            " recvfrom failed: " + std::string(strerror(errno));
+        throw std::runtime_error(error);
+      }
     }
 
-    if (err == 0)
-      continue; // Nothing received
+    if (length <= 6)
+      continue;
+    const size_t size = length / sizeof(uint16_t);
 
-    for (auto &FEM : FEMArray) {
-
-      if (!FD_ISSET(FEM.client, &readfds_work))
-        continue;
-
-      uint16_t buf_rcv[8192 / (sizeof(uint16_t))];
-      int length = 0;
-      // protect socket operations
-      {
-        length = recvfrom(FEM.client, buf_rcv, 8192, 0,
-                          (struct sockaddr *)&FEM.remote, &FEM.remote_size);
-        if (length < 0) {
-          std::string error =
-              "recvfrom failed: " + std::string(strerror(errno));
-          throw std::runtime_error(error);
-        }
+    // --- Lógica de Procesamiento ---
+    if (packetAPI.isDataFrame(&buf_rcv[1])) {
+      // const std::deque<uint16_t> frame (&buf_rcv[1], &buf_rcv[size -1]);
+      FEM.mutex_mem.lock();
+      FEM.buffer.insert(FEM.buffer.end(), &buf_rcv[1], &buf_rcv[size - offset]);
+      const size_t bufferSize = FEM.buffer.size();
+      FEM.mutex_mem.unlock();
+      if (runConfig.verboseLevel >= RunConfig::Verbosity::Debug) {
+        // packetAPI.DataPacket_Print(&buf_rcv[1], size-1);
+        std::cout << "FEM " << FEM.femID << " Packet buffered with size "
+                  << (int)size - 1 << " queue size: " << bufferSize
+                  << std::endl;
       }
-      if (runConfig.verboseLevel >= RunConfig::Verbosity::Debug)
-        std::cout << "FEM " << FEM.femID << " Packet received with length "
-                  << length << " bytes" << std::endl;
-
-      if (length <= 6)
-        continue; // empty frame?
-      const size_t size =
-          length /
-          sizeof(
-              uint16_t); // Note that length is in bytes while size is uint16_t
-
-      if (packetAPI.isDataFrame(&buf_rcv[1])) {
-        // const std::deque<uint16_t> frame (&buf_rcv[1], &buf_rcv[size -1]);
-        FEM.mutex_mem.lock();
-        FEM.buffer.insert(FEM.buffer.end(), &buf_rcv[1],
-                          &buf_rcv[size - offset]);
-        const size_t bufferSize = FEM.buffer.size();
-        FEM.mutex_mem.unlock();
-        if (runConfig.verboseLevel >= RunConfig::Verbosity::Debug) {
-          // packetAPI.DataPacket_Print(&buf_rcv[1], size-1);
-          std::cout << "FEM " << FEM.femID << " Packet buffered with size "
-                    << (int)size - 1 << " queue size: " << bufferSize
+    } else if (packetAPI.isMFrame(&buf_rcv[1])) {
+      FEM.cmd_rcv++;
+      PrintMonitoring(&buf_rcv[1], size - 1, FEM);
+    } else {
+      const short errorCode = buf_rcv[2];
+      if (runConfig.verboseLevel > RunConfig::Verbosity::Info || errorCode) {
+        if (errorCode)
+          std::cout << "---------------------ERROR----------------"
                     << std::endl;
-        }
-        if (bufferSize > 1024 * 1024 * 1024) {
-          std::string error =
-              "FEM" + std::to_string(FEM.femID) + " Buffer FULL with size " +
-              std::to_string(bufferSize / sizeof(uint16_t)) + " bytes";
-          throw std::runtime_error(error);
-        }
+        else
+          std::cout << "FEM " << FEM.femID << " DEBUG PACKET REPLY"
+                    << std::endl;
 
-      } else if (packetAPI.isMFrame(&buf_rcv[1])) {
-        // FEM.mutex_mem.lock();
-        FEM.cmd_rcv++;
-        // FEM.buffer.insert(FEM.buffer.end(), &buf_rcv[1], &buf_rcv[size]);
-        // const size_t bufferSize = FEM.buffer.size();
-        // FEM.mutex_mem.unlock();
-        if (runConfig.verboseLevel >= RunConfig::Verbosity::Info) {
-          std::cout << "FEM " << FEM.femID << " MONI PACKET" << std::endl;
-          packetAPI.DataPacket_Print(&buf_rcv[1], size - 1, stdout);
-        }
-      } else {
-        const short errorCode = buf_rcv[2];
-        if (runConfig.verboseLevel > RunConfig::Verbosity::Info || errorCode) {
-          if (errorCode)
-            std::cout << "---------------------ERROR----------------"
-                      << std::endl;
-          else
-            std::cout << "FEM " << FEM.femID << " DEBUG PACKET REPLY"
-                      << std::endl;
-          packetAPI.DataPacket_Print(&buf_rcv[1], size - 1, stdout);
-        }
-        // std::cout<<"Frame is neither data or monitoring Val
-        // 0x"<<std::hex<<buf_rcv[1]<<std::dec<<std::endl;
-        FEM.cmd_rcv++;
+        packetAPI.DataPacket_Print(&buf_rcv[1], size - 1, stdout);
       }
+      FEM.cmd_rcv++;
     }
   }
-
-  std::cout << " End of receiver " << err << std::endl;
 }
 
 void FEMDAQARCFEM::startDAQ(const std::vector<std::string> &flags) {
@@ -244,6 +194,34 @@ void FEMDAQARCFEM::stopDAQ() {
   stopEventBuilder = true;
   if (eventBuilderThread.joinable())
     eventBuilderThread.join();
+}
+
+void FEMDAQARCFEM::PrintMonitoring(uint16_t *buff, const uint16_t &size,
+                                   FEMProxy &FEM) {
+
+  if (fileRoot) {
+    char *ptr;
+    size_t size_mem;
+    FILE *mem_fp = open_memstream(&ptr, &size_mem);
+
+    fprintf(mem_fp, "FEM %u MONI PACKET\n", FEM.femID);
+    auto tmstmp = GetTimeStampFromUnixTime(getCurrentTime());
+    fprintf(mem_fp, "TIME %s\n", tmstmp);
+    packetAPI.DataPacket_Print(buff, size, mem_fp);
+
+    fclose(mem_fp);
+
+    std::fwrite(ptr, 1, size_mem, stdout);
+    FEM.monitoringLog.append(ptr, size_mem);
+
+    if (runConfig.verboseLevel >= RunConfig::Verbosity::Info) {
+      std::fwrite(ptr, 1, size_mem, stdout);
+      std::fflush(stdout);
+    }
+    free(ptr);
+  } else if (runConfig.verboseLevel >= RunConfig::Verbosity::Info) {
+    packetAPI.DataPacket_Print(buff, size, stdout);
+  }
 }
 
 void FEMDAQARCFEM::EventBuilder() {
@@ -294,7 +272,7 @@ void FEMDAQARCFEM::EventBuilder() {
       sEvent.timestamp = (double)ts * 2.E-8 + runStartTime;
       UpdateRun(sEvent.timestamp, prevEventTime, storedEvents, prevEvCount);
 
-      if (file) {
+      if (fileRoot) {
         FillTree(sEvent.timestamp, lastTimeSaved);
 
         if (storedEvents % 100 == 0) {
@@ -345,7 +323,7 @@ void FEMDAQARCFEM::EventBuilder() {
       std::cout << "FEM " << FEM.femID << " Buffer size left "
                 << FEM.buffer.size() << std::endl;
 
-  if (file) {
+  if (fileRoot) {
     CloseRootFile(runEndTime);
   }
 

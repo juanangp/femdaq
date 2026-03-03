@@ -31,7 +31,7 @@ public:
   static std::atomic<bool> stopRun;
   std::atomic<uint32_t> storedEvents{0};
 
-  std::unique_ptr<TFile> file = nullptr;
+  std::unique_ptr<TFile> fileRoot = nullptr;
   std::unique_ptr<TTree> event_tree = nullptr;
 
   void OpenRootFile(const std::string &fileName, SignalEvent &sEvent,
@@ -45,6 +45,7 @@ public:
   bool isReadOnly() const { return runConfig.readOnly; }
 
   static double getCurrentTime();
+  static std::string GetTimeStampFromUnixTime(const double tm);
   static std::string FormatElapsedTime(const double seconds);
 
   std::string MakeBaseFileName();

@@ -116,7 +116,7 @@ void FEMDAQDCC::startDAQ(const std::vector<std::string> &flags) {
     if (sEvent.signalsID.size() == 0)
       continue;
 
-    if (file) {
+    if (fileRoot) {
       FillTree(sEvent.timestamp, lastTimeSaved);
 
       if (storedEvents % 100 == 0) {
@@ -143,7 +143,7 @@ void FEMDAQDCC::startDAQ(const std::vector<std::string> &flags) {
     sEvent.Clear();
   }
 
-  if (file) {
+  if (fileRoot) {
     CloseRootFile(getCurrentTime());
   }
 

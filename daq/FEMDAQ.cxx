@@ -99,6 +99,17 @@ std::string FEMDAQ::FormatElapsedTime(const double seconds) {
   return std::string(timeStr, len) + unit;
 }
 
+std::string FEMDAQ::GetTimeStampFromUnixTime(const double tm) {
+
+  char tmpstm[20]; //"YYYY-MM-DD HH:MM:SS" + \0
+  std::time_t time = static_cast<std::time_t>(tm);
+
+  std::strftime(tmpstm, sizeof(tmpstm), "%Y-%m-%d %H:%M:%S",
+                std::localtime(&time));
+
+  return std::string(tmpstm);
+}
+
 void FEMDAQ::setActiveFEM(const std::string &FEMID) {
 
   if (FEMID == "*") {
@@ -132,10 +143,10 @@ void FEMDAQ::setActiveFEM(const std::string &FEMID) {
 void FEMDAQ::OpenRootFile(const std::string &fileName, SignalEvent &sEvent,
                           const double startTime) {
 
-  file.reset();
+  fileRoot.reset();
   event_tree.reset();
 
-  file = std::make_unique<TFile>(fileName.c_str(), "RECREATE");
+  fileRoot = std::make_unique<TFile>(fileName.c_str(), "RECREATE");
   event_tree = std::make_unique<TTree>("SignalEvent", "Signal events");
   event_tree->Branch("eventID", &sEvent.eventID);
   event_tree->Branch("timestamp", &sEvent.timestamp);
@@ -158,10 +169,10 @@ void FEMDAQ::OpenRootFile(const std::string &fileName, SignalEvent &sEvent,
 
 void FEMDAQ::CloseRootFile(const double endTime) {
 
-  if (!file || !file->IsOpen())
+  if (!fileRoot || !fileRoot->IsOpen())
     return;
 
-  file->cd();
+  fileRoot->cd();
 
   std::ostringstream ts;
   ts << std::fixed << std::setprecision(6) << endTime;
@@ -172,10 +183,10 @@ void FEMDAQ::CloseRootFile(const double endTime) {
     event_tree->Write(nullptr, TObject::kOverwrite);
   }
 
-  file->Write();
+  fileRoot->Write();
 
   event_tree.reset();
-  file.reset();
+  fileRoot.reset();
 }
 
 void FEMDAQ::FillTree(const double eventTime, double &lastTimeSaved) {
@@ -196,13 +207,9 @@ void FEMDAQ::UpdateRun(const double eventTime, double &prevEventTime,
   if (elapsed < 5)
     return;
 
-  char tmpstm[20]; //"YYYY-MM-DD HH:MM:SS" + \0
-  std::time_t currentEvTime = static_cast<std::time_t>(eventTime);
+  double runElapsedTime = eventTime - runStartTime;
 
-  std::strftime(tmpstm, sizeof(tmpstm), "%Y-%m-%d %H:%M:%S",
-                std::localtime(&currentEvTime));
-
-  double runElapsedTime = currentEvTime - runStartTime;
+  auto tmpstm = GetTimeStampFromUnixTime(eventTime);
 
   std::cout << tmpstm << " Total events: " << evCount
             << " Rate: " << (evCount - prevEvCount) / elapsed << " Hz "

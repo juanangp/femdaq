@@ -2,6 +2,7 @@
 
 #include <deque>
 #include <mutex>
+#include <string>
 
 #include "FEMSocket.h"
 
@@ -47,6 +48,8 @@ public:
   size_t bufferIndex = 0;
 
   std::deque<uint16_t> buffer;
+
+  std::string monitoringLog;
 
   inline static std::mutex mutex_mem;
 };

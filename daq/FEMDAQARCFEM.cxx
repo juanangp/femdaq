@@ -79,6 +79,25 @@ void FEMDAQARCFEM::SendCommand(const char *cmd, bool wait) {
   }
 }
 
+void FEMDAQARCFEM::SendCommand(const char *cmd, FEMProxy &FEM, bool wait) {
+
+  const int e =
+      sendto(FEM.client, cmd, strlen(cmd), 0, (struct sockaddr *)&(FEM.target),
+             sizeof(struct sockaddr));
+  if (e == -1) {
+    std::string error = "sendto failed: " + std::string(strerror(errno));
+    throw std::runtime_error(error);
+  }
+
+  if (runConfig.verboseLevel > RunConfig::Verbosity::Info)
+    std::cout << "FEM " << FEM.femID << " Command sent " << cmd << std::endl;
+
+  if (wait) {
+    FEM.cmd_sent++;
+    waitForCmd(FEM);
+  }
+}
+
 void FEMDAQARCFEM::waitForCmd(FEMProxy &FEM) {
 
   auto start = std::chrono::steady_clock::now();

@@ -33,7 +33,7 @@ void DataPacket_Print(uint16_t *fr, const uint16_t &size, FILE *fp) {
       r0 = GET_CARD_IX(*fr);
       r1 = GET_CHIP_IX(*fr);
       r2 = GET_CHAN_IX(*fr);
-      fprintf(fp, "Card %02d Chip %01d Channel_Histo_Index %02d\n", r0, r1, r2);
+      fprintf(fp, "Card %02d Chip %01d Channel %02d ", r0, r1, r2);
       fr++;
       sz_rd++;
     } else if ((*fr & PFX_12_BIT_CONTENT_MASK) == PFX_ADC_SAMPLE) {
@@ -61,7 +61,7 @@ void DataPacket_Print(uint16_t *fr, const uint16_t &size, FILE *fp) {
       fprintf(fp, "Time_Bin: %d\n", r0);
       fr++;
       sz_rd++;
-      si = 0;
+      si = r0;
     } else if ((*fr & PFX_9_BIT_CONTENT_MASK) == PFX_HISTO_BIN_IX) {
       r0 = GET_HISTO_BIN(*fr);
       fr++;
@@ -215,9 +215,6 @@ void DataPacket_Print(uint16_t *fr, const uint16_t &size, FILE *fp) {
       fprintf(fp, "Mean/Std_dev : %.2f  %.2f\n", (float)mean / 100.,
               (float)std_dev / 100.);
 
-      fr++;
-      sz_rd++;
-
     } else if (*fr == PFX_SHISTO_BINS) {
       fprintf(fp, "Threshold Turn-on curve\n");
       fr++;
@@ -273,9 +270,10 @@ void HistoStat_Print(uint16_t *&fr, int &sz_rd, FILE *fp, bool useBinCount) {
           ((float)GetUInt32FromBuffer(fr, sz_rd)) / 100.0);
   fprintf(fp, "Entries    : %d\n", GetUInt32FromBuffer(fr, sz_rd));
   // Get all bins
-  for (int j = 0; j < binCount; j++) {
-    fprintf(fp, "Bin(%2d) = %9d\n", j, GetUInt32FromBuffer(fr, sz_rd));
-  }
+  if (useBinCount)
+    for (int j = 0; j < binCount; j++) {
+      fprintf(fp, "Bin(%2d) = %9d\n", j, GetUInt32FromBuffer(fr, sz_rd));
+    }
 }
 
 uint32_t GetUInt32FromBuffer(uint16_t *&fr, int &sz_rd, bool BE) {

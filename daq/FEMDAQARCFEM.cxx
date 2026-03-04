@@ -4,6 +4,7 @@
 #include "FEMINOSPacket.h"
 
 #include <filesystem>
+#include <future>
 
 std::atomic<bool> FEMDAQARCFEM::stopReceiver(false);
 std::atomic<bool> FEMDAQARCFEM::stopEventBuilder(false);
@@ -56,29 +57,25 @@ FEMDAQARCFEM::~FEMDAQARCFEM() {
 }
 
 void FEMDAQARCFEM::SendCommand(const char *cmd, bool wait) {
+  std::vector<std::future<void>> futures;
 
   for (auto &FEM : FEMArray) {
-    if (FEM.active)
-      SendCommand(cmd, FEM, wait);
-  }
-}
-
-void FEMDAQARCFEM::SendCommand(const char *cmd, FEMProxy &FEM, bool wait) {
-
-  const int e =
-      sendto(FEM.client, cmd, strlen(cmd), 0, (struct sockaddr *)&(FEM.target),
-             sizeof(struct sockaddr));
-  if (e == -1) {
-    std::string error = "sendto failed: " + std::string(strerror(errno));
-    throw std::runtime_error(error);
+    if (FEM.active) {
+      futures.push_back(
+          std::async(std::launch::async, [this, cmd, &FEM, wait]() {
+            this->SendCommand(cmd, FEM, wait);
+          }));
+    }
   }
 
-  if (runConfig.verboseLevel > RunConfig::Verbosity::Info)
-    std::cout << "FEM " << FEM.femID << " Command sent " << cmd << std::endl;
-
-  if (wait) {
-    FEM.cmd_sent++;
-    waitForCmd(FEM);
+  try {
+    for (auto &f : futures) {
+      f.get();
+    }
+  } catch (const std::runtime_error &e) {
+    stopReceiver = true;
+    std::cout << "[CRITICAL] Command failed: " << e.what() << std::endl;
+    throw;
   }
 }
 

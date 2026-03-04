@@ -115,7 +115,7 @@ void CommandFetcher::execFile(const std::string &filename) {
     return;
   }
 
-  daq->SetExecFile(fileName);
+  daq->SetExecFile(filename);
 
   std::string line;
   while (std::getline(file, line)) {

@@ -43,10 +43,22 @@ void CommandFetcher::handleCommand(const std::string &line) {
   } else if (cmd == "fem" && !args.empty()) {
     daq->setActiveFEM(args[0]);
     return;
-  } else if (cmd == "writeMetadata") {
+  } else if (cmd == "addMetadata") {
     // Write Metadata
     if (!daq->isReadOnly())
       daq->UpdateRunConfigInfo();
+  } else if (cmd == "fopen") {
+    // Open log and root files
+    if (!daq->isReadOnly()) {
+      // Flag options, empty/all --> Logs and root files, logs --> only logs,
+      // root --> only root
+      daq->OpenFiles(args[0]);
+    }
+  } else if (cmd == "fclose") {
+    // Close log and root files
+    if (!daq->isReadOnly()) {
+      daq->CloseFiles();
+    }
   } else if (cmd == "startDAQ") {
     // Start acquisiton loop
     daq->startDAQ(args);

@@ -49,7 +49,7 @@ public:
 
   std::deque<uint16_t> buffer;
 
-  std::string monitoringLog;
+  FILE *logFile = nullptr;
 
   std::mutex mutex_mem;
 };

@@ -74,15 +74,9 @@ void FEMDAQDCC::startDAQ(const std::vector<std::string> &flags) {
   double prevEventTime = runStartTime;
   uint32_t ev_count = 0;
   uint64_t ts = 0;
-  uint64_t fileSize = 0;
 
-  int fileIndex = 1;
-  const std::string baseName = MakeBaseFileName();
-  std::string fileName = MakeFileName(baseName, fileIndex);
-
-  if (!runConfig.readOnly) {
-    OpenRootFile(fileName, sEvent, runStartTime);
-  }
+  if (fileRoot)
+    WriteRunStartTime(runStartTime);
 
   stopRun = false;
   storedEvents = 0;
@@ -120,22 +114,7 @@ void FEMDAQDCC::startDAQ(const std::vector<std::string> &flags) {
       FillTree(sEvent.timestamp, lastTimeSaved);
 
       if (storedEvents % 100 == 0) {
-        fileSize = std::filesystem::file_size(fileName);
-      }
-
-      if (fileSize >= runConfig.fileSize) {
-
-        CloseRootFile(sEvent.timestamp);
-
-        fileIndex++;
-        fileSize = 0;
-
-        // Create new writer + new model (must be recreated!)
-        fileName = MakeFileName(baseName, fileIndex);
-
-        std::cout << "New file " << fileName << " " << std::endl;
-
-        OpenRootFile(fileName, sEvent, sEvent.timestamp);
+        CheckFileSize(sEvent.timestamp);
       }
     }
 
@@ -144,7 +123,7 @@ void FEMDAQDCC::startDAQ(const std::vector<std::string> &flags) {
   }
 
   if (fileRoot) {
-    CloseRootFile(getCurrentTime());
+    WriteRunEndTime(sEvent.timestamp);
   }
 
   std::cout << "End of DAQ " << storedEvents << " events acquired" << std::endl;

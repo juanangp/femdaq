@@ -34,9 +34,22 @@ public:
   std::unique_ptr<TFile> fileRoot = nullptr;
   std::unique_ptr<TTree> event_tree = nullptr;
 
-  void OpenRootFile(const std::string &fileName, SignalEvent &sEvent,
-                    const double startTime);
-  void CloseRootFile(const double endTime);
+  void OpenRootFile();
+  void CloseRootFile();
+
+  void OpenFileLogs();
+  void DumpExecFileToFEMLog(FEMProxy &FEM);
+  void CloseLogFiles();
+
+  void OpenFiles(const std::string &flag);
+  void CloseFiles();
+
+  void CheckFileSize(const double eventTime);
+
+  inline void SetExecFile(const std::string &execF) { execFile = execF; }
+
+  void WriteRunStartTime(const double startTime);
+  void WriteRunEndTime(const double endTime);
   void FillTree(const double eventTime, double &lastTimeSaved);
   void UpdateRun(const double eventTime, double &prevEventTime,
                  const uint32_t evCount, uint32_t &prevEvCount);
@@ -48,8 +61,9 @@ public:
   static std::string GetTimeStampFromUnixTime(const double tm);
   static std::string FormatElapsedTime(const double seconds);
 
-  std::string MakeBaseFileName();
-  std::string MakeFileName(const std::string &base, int index);
+  void MakeBaseFileName();
+  void MakeFileNameRoot(int index);
+  void MakeFileNameLog();
 
   using FactoryFunc = std::function<std::unique_ptr<FEMDAQ>(RunConfig &)>;
 
@@ -69,6 +83,11 @@ protected:
   RunConfig runConfig;
   double runStartTime = 0;
   double runEndTime = 0;
+  int fileIndex = 0;
+  std::string baseFileName = "";
+  std::string fileNameRoot = "";
+  std::string execFile = "";
+  SignalEvent sEvent;
 
   static bool RegisterType(const std::string &electronics, FactoryFunc func) {
     GetRegistry()[electronics] = func;

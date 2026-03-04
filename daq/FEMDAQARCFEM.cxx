@@ -198,6 +198,7 @@ void FEMDAQARCFEM::startDAQ(const std::vector<std::string> &flags) {
 void FEMDAQARCFEM::stopDAQ() {
 
   SendCommand("daq 0x000000 F\n", false);
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
   SendCommand("sca enable 0");
   runEndTime = getCurrentTime();
@@ -210,35 +211,38 @@ void FEMDAQARCFEM::stopDAQ() {
 
 void FEMDAQARCFEM::PrintMonitoring(uint16_t *buff, const uint16_t &size,
                                    FEMProxy &FEM) {
+  char *ptr = nullptr;
+  size_t size_mem = 0;
 
-  if (fileRoot) {
-    char *ptr;
-    size_t size_mem;
-    FILE *mem_fp = open_memstream(&ptr, &size_mem);
+  FILE *mem_fp = open_memstream(&ptr, &size_mem);
+  if (!mem_fp)
+    return;
 
-    fprintf(mem_fp, "FEM %u MONI PACKET\n", FEM.femID);
-    auto tmstmp = GetTimeStampFromUnixTime(getCurrentTime());
-    fprintf(mem_fp, "TIME %s\n", tmstmp);
-    packetAPI.DataPacket_Print(buff, size, mem_fp);
+  std::string tmstmp = GetTimeStampFromUnixTime(getCurrentTime());
+  fprintf(mem_fp, "--- FEM %u MONI PACKET | %s ---\n", FEM.femID,
+          tmstmp.c_str());
 
-    fclose(mem_fp);
+  packetAPI.DataPacket_Print(buff, size, mem_fp);
+  fprintf(mem_fp, "\n");
 
-    std::fwrite(ptr, 1, size_mem, stdout);
-    FEM.monitoringLog.append(ptr, size_mem);
+  fclose(mem_fp);
+
+  if (ptr) {
+    if (FEM.logFile) {
+      std::fwrite(ptr, 1, size_mem, FEM.logFile);
+      std::fflush(FEM.logFile);
+    }
 
     if (runConfig.verboseLevel >= RunConfig::Verbosity::Info) {
       std::fwrite(ptr, 1, size_mem, stdout);
-      std::fflush(stdout);
     }
+
     free(ptr);
-  } else if (runConfig.verboseLevel >= RunConfig::Verbosity::Info) {
-    packetAPI.DataPacket_Print(buff, size, stdout);
   }
 }
 
 void FEMDAQARCFEM::EventBuilder() {
 
-  SignalEvent sEvent;
   double lastTimeSaved = runStartTime;
   uint32_t prevEvCount = 0;
   double prevEventTime = runStartTime;
@@ -246,13 +250,8 @@ void FEMDAQARCFEM::EventBuilder() {
   uint64_t ts = 0x0;
   uint64_t fileSize = 0;
 
-  int fileIndex = 1;
-  const std::string baseName = MakeBaseFileName();
-  std::string fileName = MakeFileName(baseName, fileIndex);
-
-  if (!runConfig.readOnly) {
-    OpenRootFile(fileName, sEvent, getCurrentTime());
-  }
+  if (fileRoot)
+    WriteRunStartTime(runStartTime);
 
   bool newEvent = true;
   bool emptyBuffer = true;
@@ -288,24 +287,7 @@ void FEMDAQARCFEM::EventBuilder() {
         FillTree(sEvent.timestamp, lastTimeSaved);
 
         if (storedEvents % 100 == 0) {
-          // std::cout<<"File size "<<std::filesystem::file_size(fileName)<<"
-          // "<<runConfig.fileSize<<std::endl;
-          fileSize = std::filesystem::file_size(fileName);
-        }
-
-        if (fileSize >= runConfig.fileSize) {
-
-          CloseRootFile(sEvent.timestamp);
-
-          fileIndex++;
-          fileSize = 0;
-
-          // Create new writer + new model (must be recreated!)
-          fileName = MakeFileName(baseName, fileIndex);
-
-          std::cout << "New file " << fileName << " " << std::endl;
-
-          OpenRootFile(fileName, sEvent, sEvent.timestamp);
+          CheckFileSize(sEvent.timestamp);
         }
       }
 
@@ -336,7 +318,7 @@ void FEMDAQARCFEM::EventBuilder() {
                 << FEM.buffer.size() << std::endl;
 
   if (fileRoot) {
-    CloseRootFile(runEndTime);
+    WriteRunEndTime(runEndTime);
   }
 
   std::cout << "End of event builder " << storedEvents << " events acquired"

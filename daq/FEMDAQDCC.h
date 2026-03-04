@@ -22,7 +22,7 @@ public:
       DCCPacket::packetDataType dataType = DCCPacket::packetDataType::NONE);
   void waitForTrigger();
   void saveEvent(unsigned char *buf, int size);
-  void savePedestals(unsigned char *buf, int size);
+  void PrintMonitoring(DCCPacket::DataPacket *pck);
 
 private:
   SignalEvent sEvent;

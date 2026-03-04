@@ -85,7 +85,7 @@ void FEMDAQDCC::startDAQ(const std::vector<std::string> &flags) {
   const auto &fecs = runConfig.fems.front().fecs;
   char cmd[200];
 
-  while (!abrt && !stopRun) {
+  while (!stopRun) {
     // SendCommand("fem 0");
 
     SendCommand("isobus 0x6C", FEM); // SCA start
@@ -94,6 +94,7 @@ void FEMDAQDCC::startDAQ(const std::vector<std::string> &flags) {
     sEvent.Clear();
     sEvent.eventID = eventID;
     waitForTrigger();
+    if(abrt)break;
     // Perform data acquisition phase, compress, accept size
     sEvent.timestamp = getCurrentTime();
     for (auto fecID : fecs) {
@@ -123,7 +124,7 @@ void FEMDAQDCC::startDAQ(const std::vector<std::string> &flags) {
   }
 
   if (fileRoot) {
-    WriteRunEndTime(sEvent.timestamp);
+    WriteRunEndTime(getCurrentTime());
   }
 
   std::cout << "End of DAQ " << storedEvents << " events acquired" << std::endl;
@@ -133,10 +134,8 @@ void FEMDAQDCC::stopDAQ() {}
 
 void FEMDAQDCC::SendCommand(const char *cmd, bool wait) {
 
-  for (auto &FEM : FEMArray) {
-    if (FEM.active)
-      SendCommand(cmd, FEM);
-  }
+  auto &FEM = FEMArray.front();
+  SendCommand(cmd, FEM);
 }
 
 DCCPacket::packetReply
@@ -180,12 +179,14 @@ FEMDAQDCC::SendCommand(const char *cmd, FEMProxy &FEM,
             // if (runConfig.verboseLevel > RunConfig::Verbosity::Info)
             // fprintf(stderr, "socket() failed: %s\n", strerror(errno));
           }
+          
         } else {
           std::string error =
               "recvfrom failed: " + std::string(strerror(errno));
           throw std::runtime_error(error);
         }
       }
+      if(abrt)return DCCPacket::packetReply::ERROR;
       cnt++;
     } while (length < 0 && duration.count() < 10);
 
@@ -230,9 +231,9 @@ FEMDAQDCC::SendCommand(const char *cmd, FEMProxy &FEM,
 
       if (dataType == DCCPacket::packetDataType::EVENT) {
         saveEvent(buf_ual, length);
-      } else if (dataType == DCCPacket::packetDataType::PEDESTAL) {
-        DCCPacket::DataPacket_Print(data_pkt);
-      }
+      } else {
+        PrintMonitoring(data_pkt);
+      } 
 
       // Check End Of Event
       if (GET_FRAME_TY_V2(ntohs(data_pkt->dcchdr)) & FRAME_FLAG_EOEV ||
@@ -315,45 +316,36 @@ void FEMDAQDCC::saveEvent(unsigned char *buf, int size) {
   sEvent.AddSignal(physChannel, sData);
 }
 
-void FEMDAQDCC::savePedestals(unsigned char *buf, int size) {
-  // If data supplied, copy to temporary buffer
-  if (size <= 0)
+void FEMDAQDCC::PrintMonitoring(DCCPacket::DataPacket *pck) {
+  char *ptr = nullptr;
+  size_t size_mem = 0;
+
+  auto &FEM = FEMArray.front();
+
+  FILE *mem_fp = open_memstream(&ptr, &size_mem);
+  if (!mem_fp)
     return;
-  DCCPacket::DataPacket *dp = (DCCPacket::DataPacket *)buf;
 
-  // Check if packet has ADC data
-  if (GET_TYPE(ntohs(dp->hdr)) != RESP_TYPE_HISTOSUMMARY)
-    return;
+  std::string tmstmp = GetTimeStampFromUnixTime(getCurrentTime());
+  fprintf(mem_fp, "--- FEM %u MONI PACKET | %s ---\n", FEM.femID,
+          tmstmp.c_str());
 
-  DCCPacket::PedestalHistoSummaryPacket *pck =
-      (DCCPacket::PedestalHistoSummaryPacket *)dp;
+  DataPacket_Print(pck, mem_fp);
+  fprintf(mem_fp, "\n");
 
-  unsigned short fec, asic;
-  const unsigned short arg1 = GET_RB_ARG1(ntohs(pck->args));
-  const unsigned short arg2 = GET_RB_ARG2(ntohs(pck->args));
+  fclose(mem_fp);
 
-  const unsigned int nbsw = (ntohs(pck->size) - 2 - 6 - 2) / sizeof(short);
-
-  for (unsigned short ch = 0; ch < (nbsw / 2); ch++) {
-
-    const short mean = ntohs(pck->stat[ch].mean);
-    const short stdev = ntohs(pck->stat[ch].stdev);
-
-    const int physChannel =
-        DCCPacket::Arg12ToFecAsic(arg1, arg2, fec, asic, ch);
-
-    if (runConfig.verboseLevel > RunConfig::Verbosity::Info) {
-      std::cout << "FEC " << fec << " asic " << asic << " channel " << ch
-                << " physChann " << physChannel << " mean "
-                << (double)(mean) / 100.0 << " stddev "
-                << (double)(stdev) / 100.0 << std::endl;
+  if (ptr) {
+    if (FEM.logFile) {
+      std::fwrite(ptr, 1, size_mem, FEM.logFile);
+      std::fflush(FEM.logFile);
     }
 
-    if (physChannel < 0)
-      continue;
+    if (runConfig.verboseLevel >= RunConfig::Verbosity::Info) {
+      std::fwrite(ptr, 1, size_mem, stdout);
+    }
 
-    std::vector<short> sData = {mean, stdev};
-
-    sEvent.AddSignal(physChannel, sData);
+    free(ptr);
   }
 }
+

@@ -2,7 +2,7 @@
 #define DCC_PACKET_H
 
 #include <netinet/in.h>
-#include <stdint.h>
+#include <cstdio>
 
 #define MAX_ETH_PACKET_DATA_SIZE 4096
 
@@ -177,14 +177,14 @@ enum class packetReply { ERROR = -1, RETRY = 0, OK = 1 };
 enum class packetType { ASCII = 0, BINARY = 1 };
 enum class packetDataType { NONE = 0, EVENT = 1, PEDESTAL = 2 };
 
-void DataPacket_Print(DataPacket *pck);
-void DCC_Data_Print(EndOfEventPacket *pck);
-void DCC_Histogram_Print(HistogramPacket *pck);
-void EndOfEvent_PrintPacket(EndOfEventPacket *eop);
-void Pedestal_PrintHistoMathPacket(PedestalHistoMathPacket *phm);
-void Pedestal_PrintHistoBinPacket(PedestalHistoBinPacket *pck);
-void Pedestal_PrintHistoSummaryPacket(PedestalHistoSummaryPacket *pck);
-void FemAdcDataPrint(DataPacket *pck);
+void DataPacket_Print(DataPacket *pck, FILE *fp = stdout);
+void DCC_Data_Print(EndOfEventPacket *pck, FILE *fp = stdout);
+void DCC_Histogram_Print(HistogramPacket *pck, FILE *fp = stdout);
+void EndOfEvent_PrintPacket(EndOfEventPacket *eop, FILE *fp = stdout);
+void Pedestal_PrintHistoMathPacket(PedestalHistoMathPacket *phm, FILE *fp = stdout);
+void Pedestal_PrintHistoBinPacket(PedestalHistoBinPacket *pck, FILE *fp = stdout);
+void Pedestal_PrintHistoSummaryPacket(PedestalHistoSummaryPacket *pck, FILE *fp = stdout);
+void FemAdcDataPrint(DataPacket *pck, FILE *fp = stdout);
 int Arg12ToFecAsicChannel(unsigned short arg1, unsigned short arg2,
                           unsigned short &fec, unsigned short &asic,
                           unsigned short &channel);

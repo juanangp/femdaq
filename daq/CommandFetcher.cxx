@@ -50,9 +50,10 @@ void CommandFetcher::handleCommand(const std::string &line) {
   } else if (cmd == "fopen") {
     // Open log and root files
     if (!daq->isReadOnly()) {
-      // Flag options, empty/all --> Logs and root files, logs --> only logs,
+      // Flag options, empty/all --> Logs and root files, log --> only logs,
       // root --> only root
-      daq->OpenFiles(args[0]);
+      if(!arg.empty())daq->OpenFiles(args[0]);
+      else daq->OpenFiles();
     }
   } else if (cmd == "fclose") {
     // Close log and root files

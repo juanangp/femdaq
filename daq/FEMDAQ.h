@@ -16,7 +16,12 @@ class FEMDAQ {
 public:
   std::vector<FEMProxy> FEMArray;
 
-  virtual ~FEMDAQ() = default;
+  virtual ~FEMDAQ() {
+    if(fileRoot){
+      WriteRunEndTime(getCurrentTime());
+    }
+    CloseFiles();
+  }
 
   void setActiveFEM(const std::string &FEMID);
 
@@ -41,7 +46,7 @@ public:
   void DumpExecFileToFEMLog(FEMProxy &FEM);
   void CloseLogFiles();
 
-  void OpenFiles(const std::string &flag);
+  void OpenFiles(const std::string &flag="");
   void CloseFiles();
 
   void CheckFileSize(const double eventTime);

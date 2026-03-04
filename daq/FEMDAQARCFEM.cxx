@@ -248,7 +248,6 @@ void FEMDAQARCFEM::EventBuilder() {
   double prevEventTime = runStartTime;
   uint32_t ev_count = 0;
   uint64_t ts = 0x0;
-  uint64_t fileSize = 0;
 
   if (fileRoot)
     WriteRunStartTime(runStartTime);

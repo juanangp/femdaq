@@ -138,6 +138,7 @@ void FEMDAQ::WriteRunStartTime(const double startTime) {
   if (!fileRoot || !fileRoot->IsOpen())
     return;
 
+  fileRoot->cd();
   std::ostringstream ts;
   ts << std::fixed << std::setprecision(6) << startTime;
   TObjString tsObj(ts.str().c_str());
@@ -149,6 +150,7 @@ void FEMDAQ::WriteRunEndTime(const double endTime) {
   if (!fileRoot || !fileRoot->IsOpen())
     return;
 
+  fileRoot->cd();
   std::ostringstream ts;
   ts << std::fixed << std::setprecision(6) << endTime;
   TObjString tsObj(ts.str().c_str());
@@ -211,7 +213,7 @@ void FEMDAQ::OpenFileLogs() {
 
   for (auto &FEM : FEMArray) {
     std::string fileName =
-        baseFileName + "_" + std::to_string(FEM.femID) + ".log";
+        baseFileName + "_FEM" + std::to_string(FEM.femID) + ".log";
     FEM.logFile = fopen(fileName.c_str(), "a");
     std::string ts = GetTimeStampFromUnixTime(getCurrentTime());
     fprintf(FEM.logFile, "\n--- LOG FILE INITIALIZED AT %s ---\n", ts.c_str());
@@ -297,6 +299,7 @@ void FEMDAQ::CheckFileSize(const double eventTime) {
 
 void FEMDAQ::FillTree(const double eventTime, double &lastTimeSaved) {
 
+  fileRoot->cd();
   event_tree->Fill();
   const double elapsed = eventTime - lastTimeSaved;
 

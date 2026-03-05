@@ -181,6 +181,7 @@ FEMDAQDCC::SendCommand(const char *cmd, FEMProxy &FEM,
           }
           
         } else {
+          if(abrt)return DCCPacket::packetReply::ERROR;
           std::string error =
               "recvfrom failed: " + std::string(strerror(errno));
           throw std::runtime_error(error);

@@ -25,7 +25,6 @@ public:
   void PrintMonitoring(DCCPacket::DataPacket *pck);
 
 private:
-  SignalEvent sEvent;
 
   struct Registrar {
     Registrar();

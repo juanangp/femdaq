@@ -17,7 +17,7 @@ public:
   std::vector<FEMProxy> FEMArray;
 
   virtual ~FEMDAQ() {
-    if(fileRoot){
+    if (fileRoot) {
       WriteRunEndTime(getCurrentTime());
     }
     CloseFiles();
@@ -28,8 +28,8 @@ public:
   virtual void startDAQ(const std::vector<std::string> &flags) = 0;
   virtual void stopDAQ() = 0;
   virtual void SendCommand(const char *cmd, bool wait = true) = 0;
-  virtual void Pedestals() {
-    std::cout << "Not implemented in current electronics" << std::endl;
+  virtual void Pedestals(const std::vector<std::string> &flags) {
+    std::cout << "Not implemented in this electronics" << std::endl;
   }
 
   static std::atomic<bool> abrt;
@@ -46,7 +46,7 @@ public:
   void DumpExecFileToFEMLog(FEMProxy &FEM);
   void CloseLogFiles();
 
-  void OpenFiles(const std::string &flag="");
+  void OpenFiles(const std::string &flag = "");
   void CloseFiles();
 
   void CheckFileSize(const double eventTime);

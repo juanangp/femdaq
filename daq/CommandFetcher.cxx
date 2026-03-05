@@ -52,8 +52,10 @@ void CommandFetcher::handleCommand(const std::string &line) {
     if (!daq->isReadOnly()) {
       // Flag options, empty/all --> Logs and root files, log --> only logs,
       // root --> only root
-      if(!arg.empty())daq->OpenFiles(args[0]);
-      else daq->OpenFiles();
+      if (!arg.empty())
+        daq->OpenFiles(args[0]);
+      else
+        daq->OpenFiles();
     }
   } else if (cmd == "fclose") {
     // Close log and root files
@@ -68,7 +70,7 @@ void CommandFetcher::handleCommand(const std::string &line) {
     daq->stopDAQ();
   } else if (cmd == "Pedestals") {
     // Start Pedestal loop (DCC)
-    daq->Pedestals();
+    daq->Pedestals(args);
   } else if (cmd == "sleep") {
     int sleepTime = 1;
     auto result = std::from_chars(args[0].data(),

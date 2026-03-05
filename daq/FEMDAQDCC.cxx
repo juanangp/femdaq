@@ -15,14 +15,40 @@ FEMDAQDCC::FEMDAQDCC(RunConfig &rC) : FEMDAQ(rC) {}
 
 FEMDAQDCC::~FEMDAQDCC() {}
 
-void FEMDAQDCC::Pedestals() { // TODO make configurable via flags
+void FEMDAQDCC::Pedestals(const std::vector<std::string> &flags) {
+
+  // Default values
+  int nTriggers = 100;
+  int mean = 250;
+  double stdDev = 5.0;
+
+  //// Flags processing (e.g. "nTriggers=100","mean=250", "stdDev=5.0")
+  for (size_t i = 0; i < flags.size(); ++i) {
+    const std::string &arg = flags[i];
+
+    if (arg.find("nTriggers=") == 0) {
+      nTriggers = std::stoi(arg.substr(10));
+    } else if (arg.find("mean=") == 0) {
+      mean = std::stoi(arg.substr(5));
+    } else if (arg.find("stdDev=") == 0) {
+      stdDev = std::stod(arg.substr(7));
+    } else {
+      std::cout << "Unsupported flag " << arg << " doing nothing!!!"
+                << std::endl;
+      std::cout << "Supported flags are: nTriggers=xxx, mean=yyy, stdDev=z.z"
+                << std::endl;
+    }
+  }
+
+  std::cout << "Starting pedestal run: nTriggers=" << nTriggers
+            << " mean=" << mean << " stdDev=" << stdDev << std::endl;
 
   auto &FEM = FEMArray.front();
   const auto &fecs = runConfig.fems.front().fecs;
   char cmd[200];
 
   // Pedestal acquisition
-  for (int i = 0; i < 100; i++) {
+  for (int i = 0; i < nTriggers; i++) {
     SendCommand("isobus 0x6C", FEM); // SCA start
     SendCommand("isobus 0x1C", FEM); // SCA stop
     waitForTrigger();
@@ -41,10 +67,10 @@ void FEMDAQDCC::Pedestals() { // TODO make configurable via flags
       sprintf(cmd, "hped getsummary %d %d %d:%d", fecID, a, 3, 78);
       SendCommand(cmd, FEM, DCCPacket::packetType::BINARY, 1,
                   DCCPacket::packetDataType::PEDESTAL); // Get summary
-      sprintf(cmd, "hped centermean %d %d %d:%d %d", fecID, a, 3, 78, 250);
+      sprintf(cmd, "hped centermean %d %d %d:%d %d", fecID, a, 3, 78, mean);
       SendCommand(cmd); // Set mean
-      sprintf(cmd, "hped setthr %d %d %d:%d %d %.1f", fecID, a, 3, 78, 250,
-              5.0);
+      sprintf(cmd, "hped setthr %d %d %d:%d %d %.1f", fecID, a, 3, 78, mean,
+              stdDev);
     }
   }
 }
@@ -94,7 +120,8 @@ void FEMDAQDCC::startDAQ(const std::vector<std::string> &flags) {
     sEvent.Clear();
     sEvent.eventID = eventID;
     waitForTrigger();
-    if(abrt)break;
+    if (abrt)
+      break;
     // Perform data acquisition phase, compress, accept size
     sEvent.timestamp = getCurrentTime();
     for (auto fecID : fecs) {
@@ -179,15 +206,17 @@ FEMDAQDCC::SendCommand(const char *cmd, FEMProxy &FEM,
             // if (runConfig.verboseLevel > RunConfig::Verbosity::Info)
             // fprintf(stderr, "socket() failed: %s\n", strerror(errno));
           }
-          
+
         } else {
-          if(abrt)return DCCPacket::packetReply::ERROR;
+          if (abrt)
+            return DCCPacket::packetReply::ERROR;
           std::string error =
               "recvfrom failed: " + std::string(strerror(errno));
           throw std::runtime_error(error);
         }
       }
-      if(abrt)return DCCPacket::packetReply::ERROR;
+      if (abrt)
+        return DCCPacket::packetReply::ERROR;
       cnt++;
     } while (length < 0 && duration.count() < 10);
 
@@ -234,7 +263,7 @@ FEMDAQDCC::SendCommand(const char *cmd, FEMProxy &FEM,
         saveEvent(buf_ual, length);
       } else {
         PrintMonitoring(data_pkt);
-      } 
+      }
 
       // Check End Of Event
       if (GET_FRAME_TY_V2(ntohs(data_pkt->dcchdr)) & FRAME_FLAG_EOEV ||
@@ -349,4 +378,3 @@ void FEMDAQDCC::PrintMonitoring(DCCPacket::DataPacket *pck) {
     free(ptr);
   }
 }
-

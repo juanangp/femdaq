@@ -13,7 +13,7 @@ public:
   virtual void stopDAQ() override;
   virtual void SendCommand(const char *cmd, bool wait = true) override;
 
-  virtual void Pedestals() override;
+  virtual void Pedestals(const std::vector<std::string> &flags) override;
 
   DCCPacket::packetReply SendCommand(
       const char *cmd, FEMProxy &FEM,
@@ -25,7 +25,6 @@ public:
   void PrintMonitoring(DCCPacket::DataPacket *pck);
 
 private:
-
   struct Registrar {
     Registrar();
   };

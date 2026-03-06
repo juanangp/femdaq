@@ -138,6 +138,7 @@ void FEMDAQ::WriteRunStartTime(const double startTime) {
   if (!fileRoot || !fileRoot->IsOpen())
     return;
 
+  fileRoot->cd();
   std::ostringstream ts;
   ts << std::fixed << std::setprecision(6) << startTime;
   fileRoot->cd();
@@ -150,6 +151,7 @@ void FEMDAQ::WriteRunEndTime(const double endTime) {
   if (!fileRoot || !fileRoot->IsOpen())
     return;
 
+  fileRoot->cd();
   std::ostringstream ts;
   ts << std::fixed << std::setprecision(6) << endTime;
   fileRoot->cd();

@@ -191,7 +191,7 @@ void DataPacket_Print(uint16_t *fr, const uint16_t &size, FILE *fp) {
       if (r0 & 0x1) {
         asciiMsg += (char)(*fr & 0xFF);
       }
-      std::cout << asciiMsg << std::endl;
+      fprintf(fp, "%s\n", asciiMsg.c_str());
       fr++;
       sz_rd++;
     } else if ((*fr & PFX_8_BIT_CONTENT_MASK) == PFX_START_OF_EVENT_ARC) {
@@ -452,7 +452,7 @@ void ParseEventFromWords(std::deque<uint16_t> &event, SignalEvent &sEvent,
       // std::cout<<"Start of MFRAME Size "<<event[idx]<<" bytes"<<std::endl;
       idx++;
     } else if ((w & PFX_0_BIT_CONTENT_MASK) == PFX_EXTD_CARD_CHIP_CHAN_H_MD) {
-      idx += 6; // We skip in case, this is done on GetPedestalEvent
+      idx += 6;
     } else if ((w & PFX_8_BIT_CONTENT_MASK) == PFX_START_OF_EVENT_ARC) {
       // std::cout<<"START OF EVENT "<<std::endl;
       idx++;
@@ -528,67 +528,58 @@ void ParseEventFromWords(std::deque<uint16_t> &event, SignalEvent &sEvent,
   }
 }
 
-void GetPedestalEvent(std::deque<uint16_t> &buffer, SignalEvent &sEvent) {
+void ConfigPacket_Print(uint16_t *fr, const uint16_t &size, FILE *fp) {
 
-  size_t idx = 0;
+  int sz_rd = 0;
+  uint16_t r0, r1, r2, r3;
 
-  if (buffer.empty())
+  if ((*fr & PFX_9_BIT_CONTENT_MASK) != PFX_START_OF_CFRAME)
     return;
+  fr += 2;
+  sz_rd += 2;
+  if ((*fr & PFX_8_BIT_CONTENT_MASK) == PFX_ASCII_MSG_LEN) {
+    fprintf(fp, ">>> ");
+    r0 = GET_ASCII_LEN(*fr);
+    fr++;
+    sz_rd++;
 
-  while (idx < buffer.size()) {
-    uint16_t w = buffer[idx];
-    if ((w & PFX_9_BIT_CONTENT_MASK) == PFX_START_OF_DFRAME) {
-      idx += 2;
-    } else if ((w & PFX_9_BIT_CONTENT_MASK) == PFX_START_OF_MFRAME) {
-      idx += 2;
-    } else if ((w & PFX_0_BIT_CONTENT_MASK) == PFX_EXTD_CARD_CHIP_CHAN_H_MD) {
-      std::vector<short> sData;
-      idx++;
-      w = buffer[idx];
-      uint16_t cardID = GET_EXTD_CARD_IX(w);
-      uint16_t chipID = GET_EXTD_CHIP_IX(w);
-      uint16_t chID = GET_EXTD_CHAN_IX(w);
-      int physChannel = chID + chipID * 72 + cardID * 288;
-      idx++;
-      w = buffer[idx];
-      uint32_t mean = w;
-      sData.push_back(w);
-      idx++;
-      w = buffer[idx];
-      mean |= (w << 16);
-      sData.push_back(w);
-      idx++;
-      w = buffer[idx];
-      uint32_t std_dev = w;
-      sData.push_back(w);
-      idx++;
-      w = buffer[idx];
-      sData.push_back(w);
-      std_dev |= (w << 16);
-      idx++;
-      // printf("Ped Card %02d Chip %01d Channel %02d PhysChannel %02d
-      // Mean/Std_dev : %.2f  %.2f\n", cardID, chipID, chID, physChannel,
-      // (float)mean/100., (float)std_dev/100.);
-      sEvent.AddSignal(physChannel, sData);
-    } else if ((w & PFX_8_BIT_CONTENT_MASK) == PFX_START_OF_EVENT_ARC) {
-      idx += 6;
-    } else if ((w & PFX_9_BIT_CONTENT_MASK) == PFX_CHIP_CHAN_HIT_CNT) {
-      idx++;
-    } else if ((w & PFX_11_BIT_CONTENT_MASK) == PFX_CHIP_LAST_CELL_READ_ARC) {
-      idx++;
-    } else if ((w & PFX_0_BIT_CONTENT_MASK) == PFX_EXTD_CARD_CHIP_CHAN_HIT_IX) {
-      idx += 2;
-    } else if ((w & PFX_12_BIT_CONTENT_MASK) == PFX_ADC_SAMPLE ||
-               (w & PFX_9_BIT_CONTENT_MASK) == PFX_TIME_BIN_IX) {
-      idx++;
-    } else if ((w & PFX_6_BIT_CONTENT_MASK) == PFX_END_OF_EVENT_ARC) {
-      idx += 4;
-      break;
-    } else if ((w & PFX_0_BIT_CONTENT_MASK) == PFX_END_OF_FRAME) {
-      idx++;
-    } else {
-      idx++;
+    std::string asciiMsg;
+    int j = 0;
+    for (j = 0; j < r0 / 2; j++) {
+      asciiMsg += (char)(*fr & 0xFF);
+      asciiMsg += (char)(*fr & 0xFF00) >> 8;
+      fr++;
+      sz_rd++;
     }
+    if (r0 & 0x1) {
+      asciiMsg += (char)(*fr & 0xFF);
+      fr++;
+      sz_rd++;
+    }
+    asciiMsg += "\0";
+    fprintf(fp, "%s\n", asciiMsg.c_str());
+    fr++;
+    sz_rd++;
+  } else if (*fr == PFX_LONG_ASCII_MSG) {
+    fr++;
+    sz_rd++;
+    r0 = (*fr);
+    fr++;
+    sz_rd++;
+    std::string asciiMsg;
+    int j = 0;
+    for (j = 0; j < r0 / 2; j++) {
+      asciiMsg += (char)(*fr & 0xFF);
+      asciiMsg += (char)((*fr & 0xFF00) >> 8);
+      fr++;
+      sz_rd++;
+    }
+    if (r0 & 0x1) {
+      asciiMsg += (char)(*fr & 0xFF);
+    }
+    fprintf(fp, "%s\n", asciiMsg.c_str());
+    fr++;
+    sz_rd++;
   }
 }
 

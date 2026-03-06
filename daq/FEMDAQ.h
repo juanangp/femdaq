@@ -56,8 +56,7 @@ public:
   void WriteRunStartTime(const double startTime);
   void WriteRunEndTime(const double endTime);
   void FillTree(const double eventTime, double &lastTimeSaved);
-  void UpdateRun(const double eventTime, double &prevEventTime,
-                 const uint32_t evCount, uint32_t &prevEvCount);
+  void UpdateThread();
   void UpdateRunConfigInfo() { runConfig.UpdateInfo(); }
 
   bool isReadOnly() const { return runConfig.readOnly; }
@@ -69,6 +68,8 @@ public:
   void MakeBaseFileName();
   void MakeFileNameRoot(int index);
   void MakeFileNameLog();
+
+  std::thread UpdateRunThread;
 
   using FactoryFunc = std::function<std::unique_ptr<FEMDAQ>(RunConfig &)>;
 

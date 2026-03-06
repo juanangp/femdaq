@@ -140,6 +140,7 @@ void FEMDAQ::WriteRunStartTime(const double startTime) {
 
   std::ostringstream ts;
   ts << std::fixed << std::setprecision(6) << startTime;
+  fileRoot->cd();
   TObjString tsObj(ts.str().c_str());
   tsObj.Write("startTime", TObject::kOverwrite);
 }
@@ -151,6 +152,7 @@ void FEMDAQ::WriteRunEndTime(const double endTime) {
 
   std::ostringstream ts;
   ts << std::fixed << std::setprecision(6) << endTime;
+  fileRoot->cd();
   TObjString tsObj(ts.str().c_str());
   tsObj.Write("endTime", TObject::kOverwrite);
 }
@@ -211,7 +213,7 @@ void FEMDAQ::OpenFileLogs() {
 
   for (auto &FEM : FEMArray) {
     std::string fileName =
-        baseFileName + "_" + std::to_string(FEM.femID) + ".log";
+        baseFileName + "_FEM" + std::to_string(FEM.femID) + ".log";
     FEM.logFile = fopen(fileName.c_str(), "a");
     std::string ts = GetTimeStampFromUnixTime(getCurrentTime());
     fprintf(FEM.logFile, "\n--- LOG FILE INITIALIZED AT %s ---\n", ts.c_str());
@@ -297,6 +299,7 @@ void FEMDAQ::CheckFileSize(const double eventTime) {
 
 void FEMDAQ::FillTree(const double eventTime, double &lastTimeSaved) {
 
+  fileRoot->cd();
   event_tree->Fill();
   const double elapsed = eventTime - lastTimeSaved;
 
@@ -306,26 +309,31 @@ void FEMDAQ::FillTree(const double eventTime, double &lastTimeSaved) {
   }
 }
 
-void FEMDAQ::UpdateRun(const double eventTime, double &prevEventTime,
-                       const uint32_t evCount, uint32_t &prevEvCount) {
+void FEMDAQ::UpdateThread() {
 
-  const double elapsed = eventTime - prevEventTime;
-  if (elapsed < 5)
-    return;
+  double eventTime = getCurrentTime();
+  double prevEventTime = eventTime;
+  int prevEvCount = storedEvents.load();
 
-  double runElapsedTime = eventTime - runStartTime;
+  while (!abrt && !stopRun) {
+    std::this_thread::sleep_for(std::chrono::seconds(5));
+    double eventTime = getCurrentTime();
+    const double elapsed = eventTime - prevEventTime;
+    const double runElapsedTime = eventTime - runStartTime;
+    auto tmpstm = GetTimeStampFromUnixTime(eventTime);
 
-  auto tmpstm = GetTimeStampFromUnixTime(eventTime);
-
-  std::cout << tmpstm << " Total events: " << evCount
-            << " Rate: " << (evCount - prevEvCount) / elapsed << " Hz "
-            << "Run time " << FormatElapsedTime(runElapsedTime) << std::endl;
-  prevEvCount = evCount;
-  prevEventTime = eventTime;
-
-  if (runConfig.nEvents > 0 && storedEvents.load() >= runConfig.nEvents)
-    stopRun = true;
-  if (runConfig.maxTimeSeconds > 0 &&
-      runElapsedTime >= runConfig.maxTimeSeconds)
-    stopRun = true;
+    std::cout << tmpstm << " Total events: " << storedEvents
+              << " Rate: " << (storedEvents - prevEvCount) / elapsed << " Hz "
+              << "Run time " << FormatElapsedTime(runElapsedTime) << std::endl;
+    prevEvCount = storedEvents.load();
+    prevEventTime = eventTime;
+    if (runConfig.nEvents > 0 && storedEvents.load() >= runConfig.nEvents) {
+      stopRun = true;
+      break;
+    } else if (runConfig.maxTimeSeconds > 0 &&
+               runElapsedTime >= runConfig.maxTimeSeconds) {
+      stopRun = true;
+      break;
+    }
+  }
 }

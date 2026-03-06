@@ -205,7 +205,7 @@ bool TryExtractNextEvent(std::deque<uint16_t> &buffer, size_t &idx,
                          std::deque<uint16_t> &out);
 void ParseEventFromWords(std::deque<uint16_t> &event, SignalEvent &sEvent,
                          uint64_t &tS, uint32_t &ev_count);
-void GetPedestalEvent(std::deque<uint16_t> &buffer, SignalEvent &sEvent);
+void ConfigPacket_Print(uint16_t *fr, const uint16_t &size, FILE *fp = stdout);
 bool isDataFrame(uint16_t *fr);
 bool isMFrame(uint16_t *fr);
 

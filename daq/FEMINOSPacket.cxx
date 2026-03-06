@@ -130,15 +130,19 @@ void DataPacket_Print(uint16_t *fr, const uint16_t &size, FILE *fp) {
       fr++;
       sz_rd++;
       fprintf(fp, "ASCII Msg length: %d\n", r0);
-      for (int j = 0; j < r0 / 2; j++) {
-        fprintf(fp, "%c%c", ((*fr) & 0xFF), ((*fr) >> 8));
-        fr++;
-        sz_rd++;
+      char *c = (char *)fr;
+      for (int j = 0; j < r0; j++) {
+        fprintf((FILE *)fp, "%c", *c);
+        c++;
       }
-      if ((*fr) & 0x1) { // Skip the null string parity
-        fr++;
-        sz_rd++;
+      r0++;
+      // But if the resulting size is odd, there is another null character that
+      // we should skip
+      if (r0 & 0x0001) {
+        r0++;
       }
+      fr += (r0 >> 1);
+      sz_rd += (r0 >> 1);
     } else if ((*fr & PFX_4_BIT_CONTENT_MASK) == PFX_START_OF_EVENT) {
       r0 = GET_EVENT_TYPE(*fr);
       fprintf(fp, "-- Start of Event (Type %01d) --\n", r0);
@@ -520,6 +524,38 @@ void GetPedestalEvent(std::deque<uint16_t> &buffer, SignalEvent &sEvent) {
       idx++;
     }
     // std::cout<<"Buffer size left "<<buffSize-idx<<" words "<<std::endl;
+  }
+}
+
+void ConfigPacket_Print(uint16_t *fr, const uint16_t &size, FILE *fp) {
+
+  int sz_rd = 0;
+  uint16_t r0;
+
+  if ((*fr & PFX_9_BIT_CONTENT_MASK) != PFX_START_OF_CFRAME)
+    return;
+
+  fr += 2;
+  sz_rd += 2;
+
+  if ((*fr & PFX_8_BIT_CONTENT_MASK) == PFX_ASCII_MSG_LEN) {
+    fprintf(fp, ">>> ");
+    r0 = GET_ASCII_LEN(*fr);
+    fr++;
+    sz_rd++;
+    char *c = (char *)fr;
+    for (int j = 0; j < r0; j++) {
+      fprintf(fp, "%c", *c);
+      c++;
+    }
+    r0++;
+    // But if the resulting size is odd, there is another null character that we
+    // should skip
+    if (r0 & 0x0001) {
+      r0++;
+    }
+    fr += (r0 >> 1);
+    sz_rd += (r0 >> 1);
   }
 }
 

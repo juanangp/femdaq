@@ -96,8 +96,6 @@ void FEMDAQDCC::startDAQ(const std::vector<std::string> &flags) {
   sEvent.Clear();
   runStartTime = getCurrentTime();
   double lastTimeSaved = runStartTime;
-  uint32_t prevEvCount = 0;
-  double prevEventTime = runStartTime;
   uint32_t ev_count = 0;
   uint64_t ts = 0;
 
@@ -107,6 +105,9 @@ void FEMDAQDCC::startDAQ(const std::vector<std::string> &flags) {
   stopRun = false;
   storedEvents = 0;
   int eventID = 0;
+
+  UpdateRunThread = std::thread(&FEMDAQ::UpdateThread, this);
+
   auto &FEM = FEMArray.front();
   const auto &fecs = runConfig.fems.front().fecs;
   char cmd[200];
@@ -132,10 +133,9 @@ void FEMDAQDCC::startDAQ(const std::vector<std::string> &flags) {
       }
     }
 
-    UpdateRun(sEvent.timestamp, prevEventTime, eventID, prevEvCount);
     eventID++;
 
-    if (sEvent.signalsID.size() == 0)
+    if (sEvent.signalsID.empty())
       continue;
 
     if (fileRoot) {
@@ -157,7 +157,11 @@ void FEMDAQDCC::startDAQ(const std::vector<std::string> &flags) {
   std::cout << "End of DAQ " << storedEvents << " events acquired" << std::endl;
 }
 
-void FEMDAQDCC::stopDAQ() {}
+void FEMDAQDCC::stopDAQ() {
+
+  if (UpdateRunThread.joinable())
+    UpdateRunThread.join();
+}
 
 void FEMDAQDCC::SendCommand(const char *cmd, bool wait) {
 

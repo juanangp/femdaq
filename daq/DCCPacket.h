@@ -1,8 +1,8 @@
 #ifndef DCC_PACKET_H
 #define DCC_PACKET_H
 
-#include <netinet/in.h>
 #include <cstdio>
+#include <netinet/in.h>
 
 #define MAX_ETH_PACKET_DATA_SIZE 4096
 
@@ -181,9 +181,12 @@ void DataPacket_Print(DataPacket *pck, FILE *fp = stdout);
 void DCC_Data_Print(EndOfEventPacket *pck, FILE *fp = stdout);
 void DCC_Histogram_Print(HistogramPacket *pck, FILE *fp = stdout);
 void EndOfEvent_PrintPacket(EndOfEventPacket *eop, FILE *fp = stdout);
-void Pedestal_PrintHistoMathPacket(PedestalHistoMathPacket *phm, FILE *fp = stdout);
-void Pedestal_PrintHistoBinPacket(PedestalHistoBinPacket *pck, FILE *fp = stdout);
-void Pedestal_PrintHistoSummaryPacket(PedestalHistoSummaryPacket *pck, FILE *fp = stdout);
+void Pedestal_PrintHistoMathPacket(PedestalHistoMathPacket *phm,
+                                   FILE *fp = stdout);
+void Pedestal_PrintHistoBinPacket(PedestalHistoBinPacket *pck,
+                                  FILE *fp = stdout);
+void Pedestal_PrintHistoSummaryPacket(PedestalHistoSummaryPacket *pck,
+                                      FILE *fp = stdout);
 void FemAdcDataPrint(DataPacket *pck, FILE *fp = stdout);
 int Arg12ToFecAsicChannel(unsigned short arg1, unsigned short arg2,
                           unsigned short &fec, unsigned short &asic,

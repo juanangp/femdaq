@@ -182,8 +182,15 @@ FEMDAQDCC::SendCommand(const char *cmd, FEMProxy &FEM,
     throw std::runtime_error(error);
   }
 
-  if (runConfig.verboseLevel > RunConfig::Verbosity::Info)
-    std::cout << "FEM " << FEM.femID << " Command sent " << cmd << std::endl;
+  const bool logCmd = strncmp(cmd, "wait", 4) != 0 &&
+                      strncmp(cmd, "areq", 4) != 0 &&
+                      strncmp(cmd, "isobus", 6) != 0;
+
+  if (FEM.logFile != nullptr &&
+      runConfig.verboseLevel >= RunConfig::Verbosity::Info) {
+    if (logCmd)
+      fprintf(FEM.logFile, ">> FEM %u Cmd sent %s\n", FEM.femID, cmd);
+  }
 
   // wait for incoming messages
   bool done = false;
@@ -239,24 +246,31 @@ FEMDAQDCC::SendCommand(const char *cmd, FEMProxy &FEM,
       buf_ual = &buf_rcv[0];
     }
 
-    // show packet if desired
-    if (runConfig.verboseLevel > RunConfig::Verbosity::Info) {
-      printf("dcc().rep(): %d bytes of data \n", length);
-      if (pckType == DCCPacket::packetType::BINARY) {
-        DCCPacket::DataPacket *data_pk = (DCCPacket::DataPacket *)buf_ual;
-        DCCPacket::DataPacket_Print(data_pk);
-      } else {
-        *(buf_ual + length) = '\0';
-        printf("dcc().rep(): %s", buf_ual);
-      }
-    }
-
     if ((*buf_ual == '-') && strncmp(cmd, "wait", 4) == 0) {
       return DCCPacket::packetReply::RETRY;
     } else if ((*buf_ual == '-')) { // ERROR ASCII packet
-      if (runConfig.verboseLevel >= RunConfig::Verbosity::Info)
-        printf("ERROR packet: %s\n", buf_ual);
+      *(buf_ual + length) = '\0';
+      fprintf(stdout, "--------ERROR packet---------: %s\n", buf_ual);
+      if (FEM.logFile)
+        fprintf(FEM.logFile, "--------ERROR packet---------: %s\n", buf_ual);
       return DCCPacket::packetReply::ERROR;
+    }
+
+    // show packet if desired
+    if (runConfig.verboseLevel > RunConfig::Verbosity::Info &&
+        pckType == DCCPacket::packetType::BINARY) {
+      if (FEM.logFile)
+        fprintf(FEM.logFile, ">>> dcc().rep(): %d bytes of data \n", length);
+      DCCPacket::DataPacket *data_pk = (DCCPacket::DataPacket *)buf_ual;
+      PrintMonitoring(data_pk);
+    } else if (pckType != DCCPacket::packetType::BINARY) {
+      if (logCmd) {
+        *(buf_ual + length) = '\0';
+        if (runConfig.verboseLevel > RunConfig::Verbosity::Info)
+          fprintf(stdout, "dcc().rep(): %s", buf_ual);
+        if (FEM.logFile)
+          fprintf(FEM.logFile, ">>> dcc().rep(): %s", buf_ual);
+      }
     }
 
     if (pckType == DCCPacket::packetType::BINARY) { // DAQ packet

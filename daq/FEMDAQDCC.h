@@ -13,7 +13,7 @@ public:
   virtual void stopDAQ() override;
   virtual void SendCommand(const char *cmd, bool wait = true) override;
 
-  virtual void Pedestals() override;
+  virtual void Pedestals(const std::vector<std::string> &flags) override;
 
   DCCPacket::packetReply SendCommand(
       const char *cmd, FEMProxy &FEM,
@@ -22,11 +22,9 @@ public:
       DCCPacket::packetDataType dataType = DCCPacket::packetDataType::NONE);
   void waitForTrigger();
   void saveEvent(unsigned char *buf, int size);
-  void savePedestals(unsigned char *buf, int size);
+  void PrintMonitoring(DCCPacket::DataPacket *pck);
 
 private:
-  SignalEvent sEvent;
-
   struct Registrar {
     Registrar();
   };

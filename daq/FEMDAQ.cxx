@@ -4,6 +4,7 @@
 #include <chrono>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <regex>
 
 #include <TObjString.h>
@@ -21,7 +22,7 @@ FEMDAQ::FEMDAQ(RunConfig &rC) : runConfig(rC) {
   }
 }
 
-std::string FEMDAQ::MakeBaseFileName() {
+void FEMDAQ::MakeBaseFileName() {
 
   namespace fs = std::filesystem;
 
@@ -53,15 +54,7 @@ std::string FEMDAQ::MakeBaseFileName() {
   base += "_" + runConfig.type;
 
   fs::path full = fs::path(directory) / base;
-  return full.string();
-
-  return base;
-}
-
-std::string FEMDAQ::MakeFileName(const std::string &base, int index) {
-  std::ostringstream oss;
-  oss << base << "_" << std::setw(3) << std::setfill('0') << index << ".root";
-  return oss.str();
+  baseFileName = full.string();
 }
 
 double FEMDAQ::getCurrentTime() {
@@ -99,6 +92,17 @@ std::string FEMDAQ::FormatElapsedTime(const double seconds) {
   return std::string(timeStr, len) + unit;
 }
 
+std::string FEMDAQ::GetTimeStampFromUnixTime(const double tm) {
+
+  char tmpstm[20]; //"YYYY-MM-DD HH:MM:SS" + \0
+  std::time_t time = static_cast<std::time_t>(tm);
+
+  std::strftime(tmpstm, sizeof(tmpstm), "%Y-%m-%d %H:%M:%S",
+                std::localtime(&time));
+
+  return std::string(tmpstm);
+}
+
 void FEMDAQ::setActiveFEM(const std::string &FEMID) {
 
   if (FEMID == "*") {
@@ -129,13 +133,67 @@ void FEMDAQ::setActiveFEM(const std::string &FEMID) {
   }
 }
 
-void FEMDAQ::OpenRootFile(const std::string &fileName, SignalEvent &sEvent,
-                          const double startTime) {
+void FEMDAQ::WriteRunStartTime(const double startTime) {
 
-  file.reset();
+  if (!fileRoot || !fileRoot->IsOpen())
+    return;
+
+  fileRoot->cd();
+  std::ostringstream ts;
+  ts << std::fixed << std::setprecision(6) << startTime;
+  fileRoot->cd();
+  TObjString tsObj(ts.str().c_str());
+  tsObj.Write("startTime", TObject::kOverwrite);
+}
+
+void FEMDAQ::WriteRunEndTime(const double endTime) {
+
+  if (!fileRoot || !fileRoot->IsOpen())
+    return;
+
+  fileRoot->cd();
+  std::ostringstream ts;
+  ts << std::fixed << std::setprecision(6) << endTime;
+  fileRoot->cd();
+  TObjString tsObj(ts.str().c_str());
+  tsObj.Write("endTime", TObject::kOverwrite);
+}
+
+void FEMDAQ::OpenFiles(const std::string &flag) {
+
+  MakeBaseFileName();
+  fileIndex = 1;
+
+  fileNameRoot.clear();
+
+  if (flag.empty() || flag == "all") {
+    OpenRootFile();
+    OpenFileLogs();
+  } else if (flag == "root") {
+    OpenRootFile();
+    CloseLogFiles();
+  } else if (flag == "log") {
+    CloseRootFile();
+    OpenFileLogs();
+  } else {
+    throw std::runtime_error("Invalid fopen flag: " + flag +
+                             "; valid flags are: all, root or log");
+  }
+}
+
+void FEMDAQ::OpenRootFile() {
+
+  fileRoot.reset();
   event_tree.reset();
 
-  file = std::make_unique<TFile>(fileName.c_str(), "RECREATE");
+  std::ostringstream oss;
+  oss << baseFileName << "_" << std::setw(3) << std::setfill('0') << fileIndex
+      << ".root";
+  fileNameRoot = oss.str();
+
+  std::cout << "New file " << fileNameRoot << " " << std::endl;
+
+  fileRoot = std::make_unique<TFile>(fileNameRoot.c_str(), "RECREATE");
   event_tree = std::make_unique<TTree>("SignalEvent", "Signal events");
   event_tree->Branch("eventID", &sEvent.eventID);
   event_tree->Branch("timestamp", &sEvent.timestamp);
@@ -150,36 +208,100 @@ void FEMDAQ::OpenRootFile(const std::string &fileName, SignalEvent &sEvent,
   TObjString fnameObj(rCFileName.c_str());
   fnameObj.Write("yaml_fileName", TObject::kOverwrite);
 
-  std::ostringstream ts;
-  ts << std::fixed << std::setprecision(6) << startTime;
-  TObjString tsObj(ts.str().c_str());
-  tsObj.Write("startTime", TObject::kOverwrite);
+  fileIndex++;
 }
 
-void FEMDAQ::CloseRootFile(const double endTime) {
+void FEMDAQ::OpenFileLogs() {
 
-  if (!file || !file->IsOpen())
+  for (auto &FEM : FEMArray) {
+    std::string fileName =
+        baseFileName + "_FEM" + std::to_string(FEM.femID) + ".log";
+    FEM.logFile = fopen(fileName.c_str(), "a");
+    std::string ts = GetTimeStampFromUnixTime(getCurrentTime());
+    fprintf(FEM.logFile, "\n--- LOG FILE INITIALIZED AT %s ---\n", ts.c_str());
+    fflush(FEM.logFile);
+    DumpExecFileToFEMLog(FEM);
+  }
+}
+
+void FEMDAQ::DumpExecFileToFEMLog(FEMProxy &FEM) {
+
+  if (!FEM.logFile)
+    return;
+  if (execFile.empty())
     return;
 
-  file->cd();
+  std::ifstream src(execFile);
+  if (!src.is_open()) {
+    std::cerr << "Error: Could not open text file: " << execFile << std::endl;
+    return;
+  }
 
-  std::ostringstream ts;
-  ts << std::fixed << std::setprecision(6) << endTime;
-  TObjString tsObj(ts.str().c_str());
-  tsObj.Write("endTime", TObject::kOverwrite);
+  std::string ts = GetTimeStampFromUnixTime(getCurrentTime());
+  fprintf(FEM.logFile, "\n--- [DUMP EXEC FILE: %s] Filename: %s ---\n",
+          ts.c_str(), execFile.c_str());
+  fflush(FEM.logFile);
+
+  std::string line;
+  while (std::getline(src, line)) {
+    fprintf(FEM.logFile, "%s\n", line.c_str());
+  }
+
+  fprintf(FEM.logFile, "--- [DUMP END] ---\n\n");
+  std::fflush(FEM.logFile);
+}
+
+void FEMDAQ::CloseLogFiles() {
+
+  for (auto &FEM : FEMArray) {
+    if (FEM.logFile != nullptr) {
+      fclose(FEM.logFile);
+      FEM.logFile = nullptr;
+    }
+  }
+
+  execFile.clear();
+}
+
+void FEMDAQ::CloseFiles() {
+
+  CloseRootFile();
+  CloseLogFiles();
+}
+
+void FEMDAQ::CloseRootFile() {
+
+  if (!fileRoot || !fileRoot->IsOpen())
+    return;
+
+  fileRoot->cd();
 
   if (event_tree) {
     event_tree->Write(nullptr, TObject::kOverwrite);
   }
 
-  file->Write();
+  fileRoot->Write();
 
   event_tree.reset();
-  file.reset();
+  fileRoot.reset();
+}
+
+void FEMDAQ::CheckFileSize(const double eventTime) {
+
+  uint64_t fileSize = std::filesystem::file_size(fileNameRoot);
+
+  if (fileSize >= runConfig.fileSize) {
+    WriteRunEndTime(eventTime);
+    CloseRootFile();
+
+    OpenRootFile();
+    WriteRunStartTime(eventTime);
+  }
 }
 
 void FEMDAQ::FillTree(const double eventTime, double &lastTimeSaved) {
 
+  fileRoot->cd();
   event_tree->Fill();
   const double elapsed = eventTime - lastTimeSaved;
 
@@ -189,30 +311,31 @@ void FEMDAQ::FillTree(const double eventTime, double &lastTimeSaved) {
   }
 }
 
-void FEMDAQ::UpdateRun(const double eventTime, double &prevEventTime,
-                       const uint32_t evCount, uint32_t &prevEvCount) {
+void FEMDAQ::UpdateThread() {
 
-  const double elapsed = eventTime - prevEventTime;
-  if (elapsed < 5)
-    return;
+  double eventTime = getCurrentTime();
+  double prevEventTime = eventTime;
+  int prevEvCount = storedEvents.load();
 
-  char tmpstm[20]; //"YYYY-MM-DD HH:MM:SS" + \0
-  std::time_t currentEvTime = static_cast<std::time_t>(eventTime);
+  while (!abrt && !stopRun) {
+    std::this_thread::sleep_for(std::chrono::seconds(5));
+    double eventTime = getCurrentTime();
+    const double elapsed = eventTime - prevEventTime;
+    const double runElapsedTime = eventTime - runStartTime;
+    auto tmpstm = GetTimeStampFromUnixTime(eventTime);
 
-  std::strftime(tmpstm, sizeof(tmpstm), "%Y-%m-%d %H:%M:%S",
-                std::localtime(&currentEvTime));
-
-  double runElapsedTime = currentEvTime - runStartTime;
-
-  std::cout << tmpstm << " Total events: " << evCount
-            << " Rate: " << (evCount - prevEvCount) / elapsed << " Hz "
-            << "Run time " << FormatElapsedTime(runElapsedTime) << std::endl;
-  prevEvCount = evCount;
-  prevEventTime = eventTime;
-
-  if (runConfig.nEvents > 0 && storedEvents.load() >= runConfig.nEvents)
-    stopRun = true;
-  if (runConfig.maxTimeSeconds > 0 &&
-      runElapsedTime >= runConfig.maxTimeSeconds)
-    stopRun = true;
+    std::cout << tmpstm << " Total events: " << storedEvents
+              << " Rate: " << (storedEvents - prevEvCount) / elapsed << " Hz "
+              << "Run time " << FormatElapsedTime(runElapsedTime) << std::endl;
+    prevEvCount = storedEvents.load();
+    prevEventTime = eventTime;
+    if (runConfig.nEvents > 0 && storedEvents.load() >= runConfig.nEvents) {
+      stopRun = true;
+      break;
+    } else if (runConfig.maxTimeSeconds > 0 &&
+               runElapsedTime >= runConfig.maxTimeSeconds) {
+      stopRun = true;
+      break;
+    }
+  }
 }

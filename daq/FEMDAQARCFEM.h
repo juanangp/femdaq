@@ -12,6 +12,7 @@ public:
     void (*ParseEventFromWords)(std::deque<uint16_t> &, SignalEvent &,
                                 uint64_t &, uint32_t &);
     void (*DataPacket_Print)(uint16_t *, const uint16_t &, FILE *);
+    void (*ConfigPacket_Print)(uint16_t *, const uint16_t &, FILE *);
   };
 
   PacketAPI packetAPI;
@@ -19,7 +20,8 @@ public:
   static std::atomic<bool> stopReceiver;
   static std::atomic<bool> stopEventBuilder;
 
-  std::thread receiveThread, eventBuilderThread;
+  std::thread eventBuilderThread;
+  std::vector<std::thread> receiverThreads;
 
   explicit FEMDAQARCFEM(RunConfig &rC);
   ~FEMDAQARCFEM();
@@ -28,10 +30,13 @@ public:
   virtual void stopDAQ() override;
   virtual void SendCommand(const char *cmd, bool wait = true) override;
 
-  void Receiver();
+  void FEMReceiverThread(FEMProxy &FEM);
   void EventBuilder();
   void SendCommand(const char *cmd, FEMProxy &FEM, bool wait);
   void waitForCmd(FEMProxy &FEM);
+  void SendDAQCmdThread(FEMProxy &FEM);
+
+  void PrintMonitoring(uint16_t *buff, const uint16_t &size, FEMProxy &FEM);
 
 private:
   struct Registrar {

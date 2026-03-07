@@ -43,10 +43,25 @@ void CommandFetcher::handleCommand(const std::string &line) {
   } else if (cmd == "fem" && !args.empty()) {
     daq->setActiveFEM(args[0]);
     return;
-  } else if (cmd == "writeMetadata") {
+  } else if (cmd == "addMetadata") {
     // Write Metadata
     if (!daq->isReadOnly())
       daq->UpdateRunConfigInfo();
+  } else if (cmd == "fopen") {
+    // Open log and root files
+    if (!daq->isReadOnly()) {
+      // Flag options, empty/all --> Logs and root files, log --> only logs,
+      // root --> only root
+      if (!arg.empty())
+        daq->OpenFiles(args[0]);
+      else
+        daq->OpenFiles();
+    }
+  } else if (cmd == "fclose") {
+    // Close log and root files
+    if (!daq->isReadOnly()) {
+      daq->CloseFiles();
+    }
   } else if (cmd == "startDAQ") {
     // Start acquisiton loop
     daq->startDAQ(args);
@@ -55,7 +70,7 @@ void CommandFetcher::handleCommand(const std::string &line) {
     daq->stopDAQ();
   } else if (cmd == "Pedestals") {
     // Start Pedestal loop (DCC)
-    daq->Pedestals();
+    daq->Pedestals(args);
   } else if (cmd == "sleep") {
     int sleepTime = 1;
     auto result = std::from_chars(args[0].data(),
@@ -102,6 +117,8 @@ void CommandFetcher::execFile(const std::string &filename) {
     std::cerr << "Cannot open command file: " << filename << std::endl;
     return;
   }
+
+  daq->SetExecFile(filename);
 
   std::string line;
   while (std::getline(file, line)) {

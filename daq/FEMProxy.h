@@ -2,6 +2,7 @@
 
 #include <deque>
 #include <mutex>
+#include <string>
 
 #include "FEMSocket.h"
 
@@ -21,6 +22,7 @@ public:
     buffer = std::move(other.buffer);
     cmd_sent.store(other.cmd_sent.load());
     cmd_rcv.store(other.cmd_rcv.load());
+    daq_credit.store(other.daq_credit.load());
   }
 
   FEMProxy &operator=(FEMProxy &&other) noexcept {
@@ -34,6 +36,7 @@ public:
 
       cmd_sent.store(other.cmd_sent.load());
       cmd_rcv.store(other.cmd_rcv.load());
+      daq_credit.store(other.daq_credit.load());
     }
     return *this;
   }
@@ -43,10 +46,13 @@ public:
 
   std::atomic<uint32_t> cmd_sent{0};
   std::atomic<uint32_t> cmd_rcv{0};
+  std::atomic<uint32_t> daq_credit{0};
   int femID = 0;
   size_t bufferIndex = 0;
 
   std::deque<uint16_t> buffer;
 
-  inline static std::mutex mutex_mem;
+  FILE *logFile = nullptr;
+
+  std::mutex mutex_mem;
 };

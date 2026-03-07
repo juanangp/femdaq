@@ -15,14 +15,40 @@ FEMDAQDCC::FEMDAQDCC(RunConfig &rC) : FEMDAQ(rC) {}
 
 FEMDAQDCC::~FEMDAQDCC() {}
 
-void FEMDAQDCC::Pedestals() { // TODO make configurable via flags
+void FEMDAQDCC::Pedestals(const std::vector<std::string> &flags) {
+
+  // Default values
+  int nTriggers = 100;
+  int mean = 250;
+  double stdDev = 5.0;
+
+  //// Flags processing (e.g. "nTriggers=100","mean=250", "stdDev=5.0")
+  for (size_t i = 0; i < flags.size(); ++i) {
+    const std::string &arg = flags[i];
+
+    if (arg.find("nTriggers=") == 0) {
+      nTriggers = std::stoi(arg.substr(10));
+    } else if (arg.find("mean=") == 0) {
+      mean = std::stoi(arg.substr(5));
+    } else if (arg.find("stdDev=") == 0) {
+      stdDev = std::stod(arg.substr(7));
+    } else {
+      std::cout << "Unsupported flag " << arg << " doing nothing!!!"
+                << std::endl;
+      std::cout << "Supported flags are: nTriggers=xxx, mean=yyy, stdDev=z.z"
+                << std::endl;
+    }
+  }
+
+  std::cout << "Starting pedestal run: nTriggers=" << nTriggers
+            << " mean=" << mean << " stdDev=" << stdDev << std::endl;
 
   auto &FEM = FEMArray.front();
   const auto &fecs = runConfig.fems.front().fecs;
   char cmd[200];
 
   // Pedestal acquisition
-  for (int i = 0; i < 100; i++) {
+  for (int i = 0; i < nTriggers; i++) {
     SendCommand("isobus 0x6C", FEM); // SCA start
     SendCommand("isobus 0x1C", FEM); // SCA stop
     waitForTrigger();
@@ -41,10 +67,10 @@ void FEMDAQDCC::Pedestals() { // TODO make configurable via flags
       sprintf(cmd, "hped getsummary %d %d %d:%d", fecID, a, 3, 78);
       SendCommand(cmd, FEM, DCCPacket::packetType::BINARY, 1,
                   DCCPacket::packetDataType::PEDESTAL); // Get summary
-      sprintf(cmd, "hped centermean %d %d %d:%d %d", fecID, a, 3, 78, 250);
+      sprintf(cmd, "hped centermean %d %d %d:%d %d", fecID, a, 3, 78, mean);
       SendCommand(cmd); // Set mean
-      sprintf(cmd, "hped setthr %d %d %d:%d %d %.1f", fecID, a, 3, 78, 250,
-              5.0);
+      sprintf(cmd, "hped setthr %d %d %d:%d %d %.1f", fecID, a, 3, 78, mean,
+              stdDev);
     }
   }
 }
@@ -70,28 +96,23 @@ void FEMDAQDCC::startDAQ(const std::vector<std::string> &flags) {
   sEvent.Clear();
   runStartTime = getCurrentTime();
   double lastTimeSaved = runStartTime;
-  uint32_t prevEvCount = 0;
-  double prevEventTime = runStartTime;
   uint32_t ev_count = 0;
   uint64_t ts = 0;
-  uint64_t fileSize = 0;
 
-  int fileIndex = 1;
-  const std::string baseName = MakeBaseFileName();
-  std::string fileName = MakeFileName(baseName, fileIndex);
-
-  if (!runConfig.readOnly) {
-    OpenRootFile(fileName, sEvent, runStartTime);
-  }
+  if (fileRoot)
+    WriteRunStartTime(runStartTime);
 
   stopRun = false;
   storedEvents = 0;
   int eventID = 0;
+
+  UpdateRunThread = std::thread(&FEMDAQ::UpdateThread, this);
+
   auto &FEM = FEMArray.front();
   const auto &fecs = runConfig.fems.front().fecs;
   char cmd[200];
 
-  while (!abrt && !stopRun) {
+  while (!stopRun) {
     // SendCommand("fem 0");
 
     SendCommand("isobus 0x6C", FEM); // SCA start
@@ -100,6 +121,8 @@ void FEMDAQDCC::startDAQ(const std::vector<std::string> &flags) {
     sEvent.Clear();
     sEvent.eventID = eventID;
     waitForTrigger();
+    if (abrt)
+      break;
     // Perform data acquisition phase, compress, accept size
     sEvent.timestamp = getCurrentTime();
     for (auto fecID : fecs) {
@@ -110,32 +133,16 @@ void FEMDAQDCC::startDAQ(const std::vector<std::string> &flags) {
       }
     }
 
-    UpdateRun(sEvent.timestamp, prevEventTime, eventID, prevEvCount);
     eventID++;
 
-    if (sEvent.signalsID.size() == 0)
+    if (sEvent.signalsID.empty())
       continue;
 
-    if (file) {
+    if (fileRoot) {
       FillTree(sEvent.timestamp, lastTimeSaved);
 
       if (storedEvents % 100 == 0) {
-        fileSize = std::filesystem::file_size(fileName);
-      }
-
-      if (fileSize >= runConfig.fileSize) {
-
-        CloseRootFile(sEvent.timestamp);
-
-        fileIndex++;
-        fileSize = 0;
-
-        // Create new writer + new model (must be recreated!)
-        fileName = MakeFileName(baseName, fileIndex);
-
-        std::cout << "New file " << fileName << " " << std::endl;
-
-        OpenRootFile(fileName, sEvent, sEvent.timestamp);
+        CheckFileSize(sEvent.timestamp);
       }
     }
 
@@ -143,21 +150,23 @@ void FEMDAQDCC::startDAQ(const std::vector<std::string> &flags) {
     sEvent.Clear();
   }
 
-  if (file) {
-    CloseRootFile(getCurrentTime());
+  if (fileRoot) {
+    WriteRunEndTime(getCurrentTime());
   }
 
   std::cout << "End of DAQ " << storedEvents << " events acquired" << std::endl;
 }
 
-void FEMDAQDCC::stopDAQ() {}
+void FEMDAQDCC::stopDAQ() {
+
+  if (UpdateRunThread.joinable())
+    UpdateRunThread.join();
+}
 
 void FEMDAQDCC::SendCommand(const char *cmd, bool wait) {
 
-  for (auto &FEM : FEMArray) {
-    if (FEM.active)
-      SendCommand(cmd, FEM);
-  }
+  auto &FEM = FEMArray.front();
+  SendCommand(cmd, FEM);
 }
 
 DCCPacket::packetReply
@@ -173,8 +182,15 @@ FEMDAQDCC::SendCommand(const char *cmd, FEMProxy &FEM,
     throw std::runtime_error(error);
   }
 
-  if (runConfig.verboseLevel > RunConfig::Verbosity::Info)
-    std::cout << "FEM " << FEM.femID << " Command sent " << cmd << std::endl;
+  const bool logCmd = strncmp(cmd, "wait", 4) != 0 &&
+                      strncmp(cmd, "areq", 4) != 0 &&
+                      strncmp(cmd, "isobus", 6) != 0;
+
+  if (FEM.logFile != nullptr &&
+      runConfig.verboseLevel >= RunConfig::Verbosity::Info) {
+    if (logCmd)
+      fprintf(FEM.logFile, ">> FEM %u Cmd sent %s\n", FEM.femID, cmd);
+  }
 
   // wait for incoming messages
   bool done = false;
@@ -201,12 +217,17 @@ FEMDAQDCC::SendCommand(const char *cmd, FEMProxy &FEM,
             // if (runConfig.verboseLevel > RunConfig::Verbosity::Info)
             // fprintf(stderr, "socket() failed: %s\n", strerror(errno));
           }
+
         } else {
+          if (abrt)
+            return DCCPacket::packetReply::ERROR;
           std::string error =
               "recvfrom failed: " + std::string(strerror(errno));
           throw std::runtime_error(error);
         }
       }
+      if (abrt)
+        return DCCPacket::packetReply::ERROR;
       cnt++;
     } while (length < 0 && duration.count() < 10);
 
@@ -225,24 +246,31 @@ FEMDAQDCC::SendCommand(const char *cmd, FEMProxy &FEM,
       buf_ual = &buf_rcv[0];
     }
 
-    // show packet if desired
-    if (runConfig.verboseLevel > RunConfig::Verbosity::Info) {
-      printf("dcc().rep(): %d bytes of data \n", length);
-      if (pckType == DCCPacket::packetType::BINARY) {
-        DCCPacket::DataPacket *data_pk = (DCCPacket::DataPacket *)buf_ual;
-        DCCPacket::DataPacket_Print(data_pk);
-      } else {
-        *(buf_ual + length) = '\0';
-        printf("dcc().rep(): %s", buf_ual);
-      }
-    }
-
     if ((*buf_ual == '-') && strncmp(cmd, "wait", 4) == 0) {
       return DCCPacket::packetReply::RETRY;
     } else if ((*buf_ual == '-')) { // ERROR ASCII packet
-      if (runConfig.verboseLevel >= RunConfig::Verbosity::Info)
-        printf("ERROR packet: %s\n", buf_ual);
+      *(buf_ual + length) = '\0';
+      fprintf(stdout, "--------ERROR packet---------: %s\n", buf_ual);
+      if (FEM.logFile)
+        fprintf(FEM.logFile, "--------ERROR packet---------: %s\n", buf_ual);
       return DCCPacket::packetReply::ERROR;
+    }
+
+    // show packet if desired
+    if (runConfig.verboseLevel > RunConfig::Verbosity::Info &&
+        pckType == DCCPacket::packetType::BINARY) {
+      if (FEM.logFile)
+        fprintf(FEM.logFile, ">>> dcc().rep(): %d bytes of data \n", length);
+      DCCPacket::DataPacket *data_pk = (DCCPacket::DataPacket *)buf_ual;
+      PrintMonitoring(data_pk);
+    } else if (pckType != DCCPacket::packetType::BINARY) {
+      if (logCmd) {
+        *(buf_ual + length) = '\0';
+        if (runConfig.verboseLevel > RunConfig::Verbosity::Info)
+          fprintf(stdout, "dcc().rep(): %s", buf_ual);
+        if (FEM.logFile)
+          fprintf(FEM.logFile, ">>> dcc().rep(): %s", buf_ual);
+      }
     }
 
     if (pckType == DCCPacket::packetType::BINARY) { // DAQ packet
@@ -251,8 +279,8 @@ FEMDAQDCC::SendCommand(const char *cmd, FEMProxy &FEM,
 
       if (dataType == DCCPacket::packetDataType::EVENT) {
         saveEvent(buf_ual, length);
-      } else if (dataType == DCCPacket::packetDataType::PEDESTAL) {
-        DCCPacket::DataPacket_Print(data_pkt);
+      } else {
+        PrintMonitoring(data_pkt);
       }
 
       // Check End Of Event
@@ -336,45 +364,35 @@ void FEMDAQDCC::saveEvent(unsigned char *buf, int size) {
   sEvent.AddSignal(physChannel, sData);
 }
 
-void FEMDAQDCC::savePedestals(unsigned char *buf, int size) {
-  // If data supplied, copy to temporary buffer
-  if (size <= 0)
+void FEMDAQDCC::PrintMonitoring(DCCPacket::DataPacket *pck) {
+  char *ptr = nullptr;
+  size_t size_mem = 0;
+
+  auto &FEM = FEMArray.front();
+
+  FILE *mem_fp = open_memstream(&ptr, &size_mem);
+  if (!mem_fp)
     return;
-  DCCPacket::DataPacket *dp = (DCCPacket::DataPacket *)buf;
 
-  // Check if packet has ADC data
-  if (GET_TYPE(ntohs(dp->hdr)) != RESP_TYPE_HISTOSUMMARY)
-    return;
+  std::string tmstmp = GetTimeStampFromUnixTime(getCurrentTime());
+  fprintf(mem_fp, "--- FEM %u MONI PACKET | %s ---\n", FEM.femID,
+          tmstmp.c_str());
 
-  DCCPacket::PedestalHistoSummaryPacket *pck =
-      (DCCPacket::PedestalHistoSummaryPacket *)dp;
+  DataPacket_Print(pck, mem_fp);
+  fprintf(mem_fp, "\n");
 
-  unsigned short fec, asic;
-  const unsigned short arg1 = GET_RB_ARG1(ntohs(pck->args));
-  const unsigned short arg2 = GET_RB_ARG2(ntohs(pck->args));
+  fclose(mem_fp);
 
-  const unsigned int nbsw = (ntohs(pck->size) - 2 - 6 - 2) / sizeof(short);
-
-  for (unsigned short ch = 0; ch < (nbsw / 2); ch++) {
-
-    const short mean = ntohs(pck->stat[ch].mean);
-    const short stdev = ntohs(pck->stat[ch].stdev);
-
-    const int physChannel =
-        DCCPacket::Arg12ToFecAsic(arg1, arg2, fec, asic, ch);
-
-    if (runConfig.verboseLevel > RunConfig::Verbosity::Info) {
-      std::cout << "FEC " << fec << " asic " << asic << " channel " << ch
-                << " physChann " << physChannel << " mean "
-                << (double)(mean) / 100.0 << " stddev "
-                << (double)(stdev) / 100.0 << std::endl;
+  if (ptr) {
+    if (FEM.logFile) {
+      std::fwrite(ptr, 1, size_mem, FEM.logFile);
+      std::fflush(FEM.logFile);
     }
 
-    if (physChannel < 0)
-      continue;
+    if (runConfig.verboseLevel >= RunConfig::Verbosity::Info) {
+      std::fwrite(ptr, 1, size_mem, stdout);
+    }
 
-    std::vector<short> sData = {mean, stdev};
-
-    sEvent.AddSignal(physChannel, sData);
+    free(ptr);
   }
 }

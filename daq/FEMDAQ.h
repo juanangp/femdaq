@@ -16,39 +16,60 @@ class FEMDAQ {
 public:
   std::vector<FEMProxy> FEMArray;
 
-  virtual ~FEMDAQ() = default;
+  virtual ~FEMDAQ() {
+    if (fileRoot) {
+      WriteRunEndTime(getCurrentTime());
+    }
+    CloseFiles();
+  }
 
   void setActiveFEM(const std::string &FEMID);
 
   virtual void startDAQ(const std::vector<std::string> &flags) = 0;
   virtual void stopDAQ() = 0;
   virtual void SendCommand(const char *cmd, bool wait = true) = 0;
-  virtual void Pedestals() {
-    std::cout << "Not implemented in current electronics" << std::endl;
+  virtual void Pedestals(const std::vector<std::string> &flags) {
+    std::cout << "Not implemented in this electronics" << std::endl;
   }
 
   static std::atomic<bool> abrt;
   static std::atomic<bool> stopRun;
   std::atomic<uint32_t> storedEvents{0};
 
-  std::unique_ptr<TFile> file = nullptr;
+  std::unique_ptr<TFile> fileRoot = nullptr;
   std::unique_ptr<TTree> event_tree = nullptr;
 
-  void OpenRootFile(const std::string &fileName, SignalEvent &sEvent,
-                    const double startTime);
-  void CloseRootFile(const double endTime);
+  void OpenRootFile();
+  void CloseRootFile();
+
+  void OpenFileLogs();
+  void DumpExecFileToFEMLog(FEMProxy &FEM);
+  void CloseLogFiles();
+
+  void OpenFiles(const std::string &flag = "");
+  void CloseFiles();
+
+  void CheckFileSize(const double eventTime);
+
+  inline void SetExecFile(const std::string &execF) { execFile = execF; }
+
+  void WriteRunStartTime(const double startTime);
+  void WriteRunEndTime(const double endTime);
   void FillTree(const double eventTime, double &lastTimeSaved);
-  void UpdateRun(const double eventTime, double &prevEventTime,
-                 const uint32_t evCount, uint32_t &prevEvCount);
+  void UpdateThread();
   void UpdateRunConfigInfo() { runConfig.UpdateInfo(); }
 
   bool isReadOnly() const { return runConfig.readOnly; }
 
   static double getCurrentTime();
+  static std::string GetTimeStampFromUnixTime(const double tm);
   static std::string FormatElapsedTime(const double seconds);
 
-  std::string MakeBaseFileName();
-  std::string MakeFileName(const std::string &base, int index);
+  void MakeBaseFileName();
+  void MakeFileNameRoot(int index);
+  void MakeFileNameLog();
+
+  std::thread UpdateRunThread;
 
   using FactoryFunc = std::function<std::unique_ptr<FEMDAQ>(RunConfig &)>;
 
@@ -68,6 +89,11 @@ protected:
   RunConfig runConfig;
   double runStartTime = 0;
   double runEndTime = 0;
+  int fileIndex = 0;
+  std::string baseFileName = "";
+  std::string fileNameRoot = "";
+  std::string execFile = "";
+  SignalEvent sEvent;
 
   static bool RegisterType(const std::string &electronics, FactoryFunc func) {
     GetRegistry()[electronics] = func;

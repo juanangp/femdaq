@@ -33,7 +33,7 @@ void DataPacket_Print(uint16_t *fr, const uint16_t &size, FILE *fp) {
       r0 = GET_CARD_IX(*fr);
       r1 = GET_CHIP_IX(*fr);
       r2 = GET_CHAN_IX(*fr);
-      fprintf(fp, "Card %02d Chip %01d Channel_Histo_Index %02d\n", r0, r1, r2);
+      fprintf(fp, "Card %02d Chip %01d Channel %02d ", r0, r1, r2);
       fr++;
       sz_rd++;
     } else if ((*fr & PFX_12_BIT_CONTENT_MASK) == PFX_ADC_SAMPLE) {
@@ -61,7 +61,7 @@ void DataPacket_Print(uint16_t *fr, const uint16_t &size, FILE *fp) {
       fprintf(fp, "Time_Bin: %d\n", r0);
       fr++;
       sz_rd++;
-      si = 0;
+      si = r0;
     } else if ((*fr & PFX_9_BIT_CONTENT_MASK) == PFX_HISTO_BIN_IX) {
       r0 = GET_HISTO_BIN(*fr);
       fr++;
@@ -130,15 +130,19 @@ void DataPacket_Print(uint16_t *fr, const uint16_t &size, FILE *fp) {
       fr++;
       sz_rd++;
       fprintf(fp, "ASCII Msg length: %d\n", r0);
-      for (int j = 0; j < r0 / 2; j++) {
-        fprintf(fp, "%c%c", ((*fr) & 0xFF), ((*fr) >> 8));
-        fr++;
-        sz_rd++;
+      char *c = (char *)fr;
+      for (int j = 0; j < r0; j++) {
+        fprintf((FILE *)fp, "%c", *c);
+        c++;
       }
-      if ((*fr) & 0x1) { // Skip the null string parity
-        fr++;
-        sz_rd++;
+      r0++;
+      // But if the resulting size is odd, there is another null character that
+      // we should skip
+      if (r0 & 0x0001) {
+        r0++;
       }
+      fr += (r0 >> 1);
+      sz_rd += (r0 >> 1);
     } else if ((*fr & PFX_4_BIT_CONTENT_MASK) == PFX_START_OF_EVENT) {
       r0 = GET_EVENT_TYPE(*fr);
       fprintf(fp, "-- Start of Event (Type %01d) --\n", r0);
@@ -215,9 +219,6 @@ void DataPacket_Print(uint16_t *fr, const uint16_t &size, FILE *fp) {
       fprintf(fp, "Mean/Std_dev : %.2f  %.2f\n", (float)mean / 100.,
               (float)std_dev / 100.);
 
-      fr++;
-      sz_rd++;
-
     } else if (*fr == PFX_SHISTO_BINS) {
       fprintf(fp, "Threshold Turn-on curve\n");
       fr++;
@@ -273,9 +274,10 @@ void HistoStat_Print(uint16_t *&fr, int &sz_rd, FILE *fp, bool useBinCount) {
           ((float)GetUInt32FromBuffer(fr, sz_rd)) / 100.0);
   fprintf(fp, "Entries    : %d\n", GetUInt32FromBuffer(fr, sz_rd));
   // Get all bins
-  for (int j = 0; j < binCount; j++) {
-    fprintf(fp, "Bin(%2d) = %9d\n", j, GetUInt32FromBuffer(fr, sz_rd));
-  }
+  if (useBinCount)
+    for (int j = 0; j < binCount; j++) {
+      fprintf(fp, "Bin(%2d) = %9d\n", j, GetUInt32FromBuffer(fr, sz_rd));
+    }
 }
 
 uint32_t GetUInt32FromBuffer(uint16_t *&fr, int &sz_rd, bool BE) {
@@ -522,6 +524,38 @@ void GetPedestalEvent(std::deque<uint16_t> &buffer, SignalEvent &sEvent) {
       idx++;
     }
     // std::cout<<"Buffer size left "<<buffSize-idx<<" words "<<std::endl;
+  }
+}
+
+void ConfigPacket_Print(uint16_t *fr, const uint16_t &size, FILE *fp) {
+
+  int sz_rd = 0;
+  uint16_t r0;
+
+  if ((*fr & PFX_9_BIT_CONTENT_MASK) != PFX_START_OF_CFRAME)
+    return;
+
+  fr += 2;
+  sz_rd += 2;
+
+  if ((*fr & PFX_8_BIT_CONTENT_MASK) == PFX_ASCII_MSG_LEN) {
+    fprintf(fp, ">>> ");
+    r0 = GET_ASCII_LEN(*fr);
+    fr++;
+    sz_rd++;
+    char *c = (char *)fr;
+    for (int j = 0; j < r0; j++) {
+      fprintf(fp, "%c", *c);
+      c++;
+    }
+    r0++;
+    // But if the resulting size is odd, there is another null character that we
+    // should skip
+    if (r0 & 0x0001) {
+      r0++;
+    }
+    fr += (r0 >> 1);
+    sz_rd += (r0 >> 1);
   }
 }
 

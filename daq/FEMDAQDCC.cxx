@@ -115,9 +115,9 @@ void FEMDAQDCC::startDAQ(const std::vector<std::string> &flags) {
   while (!stopRun) {
     // SendCommand("fem 0");
 
-    SendCommand("isobus 0x6C", FEM); // SCA start
+    SendCommand("isobus 0x64", FEM); // SCA start
     if (internal)
-      SendCommand("isobus 0x1C", FEM);
+      SendCommand("isobus 0x14", FEM);
     sEvent.Clear();
     sEvent.eventID = eventID;
     waitForTrigger();
@@ -166,7 +166,21 @@ void FEMDAQDCC::stopDAQ() {
 void FEMDAQDCC::SendCommand(const char *cmd, bool wait) {
 
   auto &FEM = FEMArray.front();
-  SendCommand(cmd, FEM);
+
+  if (std::strstr(cmd, "asic") && (std::strstr(cmd, "gain") || std::strstr(cmd, "time"))) {
+    uint32_t asicID = 0, gain = 0, time = 0;
+    if (std::sscanf(cmd, "asic %u gain 0x%x time 0x%x", &asicID, &gain, &time) == 3){
+      uint8_t regValue = ((time & 0x0F) << 3) | ((gain & 0x03) << 1);
+      char finalCmd[64];
+      std::snprintf(finalCmd, sizeof(finalCmd), "asic %u write 1 0x%X", asicID, regValue);
+      SendCommand(finalCmd, FEM);
+    } else {
+      std::string error = "Invalid cmd sintax: " + std::string(cmd) + " proper sintax is asic 0 gain 0x1 time 0x3";
+      throw std::runtime_error(error);
+    }
+  } else {
+    SendCommand(cmd, FEM);
+  }
 }
 
 DCCPacket::packetReply

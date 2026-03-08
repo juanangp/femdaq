@@ -86,15 +86,14 @@ void FEMDAQARCFEM::SendDAQCmdThread(FEMProxy &FEM) {
   SendCommand("daq 0x000000 F\n", FEM, false);
 }
 
-void FEMDAQARCFEM::SendCommand(const char *cmd, bool wait) {
+void FEMDAQARCFEM::SendCommand(const char *cmd) {
   std::vector<std::future<void>> futures;
 
   for (auto &FEM : FEMArray) {
     if (FEM.active) {
-      futures.push_back(
-          std::async(std::launch::async, [this, cmd, &FEM, wait]() {
-            this->SendCommand(cmd, FEM, wait);
-          }));
+      futures.push_back(std::async(std::launch::async, [this, cmd, &FEM]() {
+        this->SendCommand(cmd, FEM);
+      }));
     }
   }
 

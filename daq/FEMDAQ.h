@@ -27,7 +27,7 @@ public:
 
   virtual void startDAQ(const std::vector<std::string> &flags) = 0;
   virtual void stopDAQ() = 0;
-  virtual void SendCommand(const char *cmd, bool wait = true) = 0;
+  virtual void SendCommand(const char *cmd) = 0;
   virtual void Pedestals(const std::vector<std::string> &flags) {
     std::cout << "Not implemented in this electronics" << std::endl;
   }

@@ -164,7 +164,7 @@ void FEMDAQDCC::stopDAQ() {
     UpdateRunThread.join();
 }
 
-void FEMDAQDCC::SendCommand(const char *cmd, bool wait) {
+void FEMDAQDCC::SendCommand(const char *cmd) {
 
   auto &FEM = FEMArray.front();
 

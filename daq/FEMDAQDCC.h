@@ -11,7 +11,7 @@ public:
 
   virtual void startDAQ(const std::vector<std::string> &flags) override;
   virtual void stopDAQ() override;
-  virtual void SendCommand(const char *cmd, bool wait = true) override;
+  virtual void SendCommand(const char *cmd) override;
 
   virtual void Pedestals(const std::vector<std::string> &flags) override;
 

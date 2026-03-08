@@ -28,11 +28,11 @@ public:
 
   virtual void startDAQ(const std::vector<std::string> &flags) override;
   virtual void stopDAQ() override;
-  virtual void SendCommand(const char *cmd, bool wait = true) override;
+  virtual void SendCommand(const char *cmd) override;
 
   void FEMReceiverThread(FEMProxy &FEM);
   void EventBuilder();
-  void SendCommand(const char *cmd, FEMProxy &FEM, bool wait);
+  void SendCommand(const char *cmd, FEMProxy &FEM, bool wait = true);
   void waitForCmd(FEMProxy &FEM);
   void SendDAQCmdThread(FEMProxy &FEM);
 

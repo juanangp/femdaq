@@ -7,12 +7,12 @@
 #define MAX_ETH_PACKET_DATA_SIZE 4096
 
 // Response Packet Header Decode Macros
-#define GET_REQ_INDEX(word) ((word)&0x000F)
-#define GET_WR_ACK(word) ((word)&0x0030)
-#define GET_RD_ACK(word) ((word)&0x0040)
-#define GET_TR_OK(word) ((word)&0x0080)
-#define GET_TYPE(word) ((word)&0xF000)
-#define PUT_TYPE(word, ty) (((word)&0x0FFF) | ((ty)&0xF000))
+#define GET_REQ_INDEX(word) ((word) & 0x000F)
+#define GET_WR_ACK(word) ((word) & 0x0030)
+#define GET_RD_ACK(word) ((word) & 0x0040)
+#define GET_TR_OK(word) ((word) & 0x0080)
+#define GET_TYPE(word) ((word) & 0xF000)
+#define PUT_TYPE(word, ty) (((word) & 0x0FFF) | ((ty) & 0xF000))
 
 // Response Packet Types from FEM (see t2k_pkg.vhd for coherence)
 #define RESP_TYPE_ADC_DATA 0x0000
@@ -21,49 +21,49 @@
 #define RESP_TYPE_HISTOGRAM 0x2000
 #define RESP_TYPE_HISTOSTAT 0x3000
 #define RESP_TYPE_HISTOSUMMARY 0x4000
-#define GET_RESP_TYPE(word) (((word)&0xF000) >> 12)
-#define GET_RESP_INDEX(word) ((word)&0x000F)
+#define GET_RESP_TYPE(word) (((word) & 0xF000) >> 12)
+#define GET_RESP_INDEX(word) ((word) & 0x000F)
 
 // Macros to interpret DataPacket header
-#define GET_FEC_ERROR(word) (((word)&0x03F0) >> 4)
-#define GET_LOS_FLAG(word) (((word)&0x0400) >> 10)
-#define GET_SYNCH_FAIL(word) (((word)&0x0800) >> 11)
+#define GET_FEC_ERROR(word) (((word) & 0x03F0) >> 4)
+#define GET_LOS_FLAG(word) (((word) & 0x0400) >> 10)
+#define GET_SYNCH_FAIL(word) (((word) & 0x0800) >> 11)
 
 // Macros to interpret DataPacket read back arguments
-#define GET_RB_MODE(word) (((word)&0x4000) >> 14)
-#define GET_RB_COMPRESS(word) (((word)&0x2000) >> 13)
-#define GET_RB_ARG2(word) (((word)&0x1E00) >> 9)
-#define GET_RB_ARG1(word) (((word)&0x01FF))
+#define GET_RB_MODE(word) (((word) & 0x4000) >> 14)
+#define GET_RB_COMPRESS(word) (((word) & 0x2000) >> 13)
+#define GET_RB_ARG2(word) (((word) & 0x1E00) >> 9)
+#define GET_RB_ARG1(word) (((word) & 0x01FF))
 
 // Macros to interpret DataPacket event type / count
-#define GET_EVENT_TYPE(word) (((word)&0xC000) >> 14)
-#define GET_EVENT_COUNT(word) (((word)&0x3FFF))
+#define GET_EVENT_TYPE(word) (((word) & 0xC000) >> 14)
+#define GET_EVENT_COUNT(word) (((word) & 0x3FFF))
 
 // Macros to interpret DataPacket Samples
 #define CELL_INDEX_FLAG 0x1000
-#define GET_CELL_INDEX(word) (((word)&0x0FFF))
+#define GET_CELL_INDEX(word) (((word) & 0x0FFF))
 #define ARGUMENT_FLAG 0x2000
-#define GET_ARGUMENTS(word) (((word)&0xDFFF))
+#define GET_ARGUMENTS(word) (((word) & 0xDFFF))
 #define SAMPLE_COUNT_FLAG 0x4000
-#define GET_SAMPLE_COUNT(word) (((word)&0x0FFF))
+#define GET_SAMPLE_COUNT(word) (((word) & 0x0FFF))
 
 // Macros to manipulate DataPacket DCC header
 #define FRAME_TYPE_FEM_DATA 0x0000
 #define FRAME_TYPE_DCC_DATA 0x0001
 #define FRAME_FLAG_EORQ 0x0004
 #define FRAME_FLAG_EOEV 0x0008
-#define GET_FEM_INDEX(word) (((word)&0x000F) >> 0)
-#define GET_DCC_INDEX(word) (((word)&0x03F0) >> 4)
-#define GET_FRAME_TY_V2(word) (((word)&0x3C00) >> 10)
-#define PUT_FEM_INDEX(word, ix) (((word)&0xFFF0) | (((ix)&0x000F) << 0))
-#define PUT_DCC_INDEX(word, ix) (((word)&0xFC0F) | (((ix)&0x003F) << 4))
+#define GET_FEM_INDEX(word) (((word) & 0x000F) >> 0)
+#define GET_DCC_INDEX(word) (((word) & 0x03F0) >> 4)
+#define GET_FRAME_TY_V2(word) (((word) & 0x3C00) >> 10)
+#define PUT_FEM_INDEX(word, ix) (((word) & 0xFFF0) | (((ix) & 0x000F) << 0))
+#define PUT_DCC_INDEX(word, ix) (((word) & 0xFC0F) | (((ix) & 0x003F) << 4))
 #define PUT_FRAME_TY_V2(word, ty)                                              \
-  (((word)&0x03FF) | FRAME_HDR_V2 | (((ty)&0x000F) << 10))
+  (((word) & 0x03FF) | FRAME_HDR_V2 | (((ty) & 0x000F) << 10))
 
 // We now support the old and new version of the data packet structure
 #define FRAME_HDR_V2_FIELD 0xC000
 #define FRAME_HDR_V2 0x4000
-#define IS_DATA_PACKET_V2(word) (((word)&FRAME_HDR_V2_FIELD) == FRAME_HDR_V2)
+#define IS_DATA_PACKET_V2(word) (((word) & FRAME_HDR_V2_FIELD) == FRAME_HDR_V2)
 
 // Miscellanea
 #define MAX_NB_OF_FEM_PER_DCC 6

@@ -138,10 +138,10 @@ void FEMDAQDCC::startDAQ(const std::vector<std::string> &flags) {
     uint16_t t3 = static_cast<uint16_t>(us & 0xFFFF);         // Bits 15-0
 
     FEM.mutex_mem.lock();
-    FEM.buffer.insert(FEM.buffer.end(), 0xFFFF, 1); // Insert word to mark EOE
-    FEM.buffer.insert(FEM.buffer.end(), t1);        // Insert timeStamp 48 bits
-    FEM.buffer.insert(FEM.buffer.end(), t2);
-    FEM.buffer.insert(FEM.buffer.end(), t3);
+    FEM.buffer.emplace_back(0xFFFF); // Insert word to mark EOE
+    FEM.buffer.emplace_back(t1);     // Insert timeStamp 48 bits
+    FEM.buffer.emplace_back(t2);
+    FEM.buffer.emplace_back(t3);
     FEM.mutex_mem.unlock();
   }
 }
@@ -157,33 +157,35 @@ void FEMDAQDCC::EventBuilder() {
   if (fileRoot)
     WriteRunStartTime(runStartTime);
 
-  bool newEvent = true;
-  bool emptyBuffer = true;
+  bool newEvent = false;
+  bool emptyBuffer = false;
   int tC = 0;
 
   std::vector<uint16_t> eventBuffer;
   eventBuffer.reserve(6 * 72 * 4 * 800);
 
-  while (!(emptyBuffer && stopEventBuilder)) {
+  FEM.bufferIndex = 0;
 
-    emptyBuffer = true;
-    newEvent = true;
+  std::cout << "Start of event builder" << std::endl;
+
+  while (!(emptyBuffer && stopEventBuilder)) {
 
     FEM.mutex_mem.lock();
     emptyBuffer = FEM.buffer.empty();
     if (!emptyBuffer) {
-      FEM.pendingEvent = !DCCPacket::TryExtractNextEvent(
-          FEM.buffer, FEM.bufferIndex, eventBuffer);
+      newEvent = DCCPacket::TryExtractNextEvent(FEM.buffer, FEM.bufferIndex,
+                                                eventBuffer);
     }
     FEM.mutex_mem.unlock();
 
-    if (!FEM.pendingEvent) {
+    if (newEvent) {
       DCCPacket::ParseEventFromWords(eventBuffer, sEvent, ts, ev_count);
       eventBuffer.clear();
       sEvent.eventID = ev_count;
       sEvent.timestamp = (double)ts * 1.E-6 + runStartTime;
 
-      if (fileRoot) {
+      // Do not fill empty events
+      if (fileRoot && !sEvent.signalsID.empty()) {
         FillTree(sEvent.timestamp, lastTimeSaved);
 
         if (storedEvents % 100 == 0) {
@@ -191,10 +193,13 @@ void FEMDAQDCC::EventBuilder() {
         }
       }
 
-      FEM.pendingEvent = true;
+      newEvent = false;
+      eventBuffer.clear();
 
-      ++storedEvents;
-      sEvent.Clear();
+      if (!sEvent.signalsID.empty()) {
+        ++storedEvents;
+        sEvent.Clear();
+      }
     }
 
     if (stopEventBuilder) {
@@ -211,8 +216,8 @@ void FEMDAQDCC::EventBuilder() {
     std::this_thread::sleep_for(std::chrono::milliseconds(5));
   }
 
-  std::cout << "End of event builder " << storedEvents << " events acquired"
-            << std::endl;
+  std::cout << "End of event builder: " << storedEvents << " events stored and "
+            << ev_count << " events triggered" << std::endl;
 
   if (!FEM.buffer.empty()) {
     std::cout << "FEM " << FEM.femID << " Buffer size left "
@@ -333,12 +338,11 @@ bool FEMDAQDCC::SendCommand(const char *cmd, FEMProxy &FEM, int pckType) {
     // boundary, so skip these first two bytes
     int index = 0;
     if ((buf_rcv[0] == 0)) {
-      buf_ual = buf_ual = reinterpret_cast<uint8_t *>(&buf_rcv[1]);
       length -= 2;
       index = 1;
-    } else {
-      buf_ual = reinterpret_cast<uint8_t *>(&buf_rcv[0]);
     }
+
+    buf_ual = reinterpret_cast<uint8_t *>(&buf_rcv[1]);
 
     // ERROR ASCII packet
     if (*buf_ual == '-') {
@@ -356,14 +360,13 @@ bool FEMDAQDCC::SendCommand(const char *cmd, FEMProxy &FEM, int pckType) {
       DCCPacket::DataPacket *data_pkt = (DCCPacket::DataPacket *)buf_ual;
 
       if (GET_TYPE(ntohs(data_pkt->hdr)) == RESP_TYPE_ADC_DATA) {
-        const size_t size = length / sizeof(uint16_t);
+        const size_t pckSize = (ntohs(data_pkt->size)) / sizeof(uint16_t);
         FEM.mutex_mem.lock();
         FEM.buffer.insert(FEM.buffer.end(), &buf_rcv[index],
-                          &buf_rcv[size - 2]); // Skip CRC32
+                          &buf_rcv[index + pckSize]);
         const size_t bufferSize = FEM.buffer.size();
         FEM.mutex_mem.unlock();
 
-        // saveEvent(buf_ual, length);
         if (runConfig.verboseLevel > RunConfig::Verbosity::Info)
           PrintMonitoring(data_pkt);
       } else {
@@ -400,61 +403,6 @@ void FEMDAQDCC::waitForTrigger() { // Wait till trigger is acquired
     retry =
         SendCommand("wait 1000000", FEM); // Wait for the event to be acquired
   } while (retry && !abrt); // Infinite loop till aborted or wait succeed
-}
-
-void FEMDAQDCC::saveEvent(unsigned char *buf, int size) {
-  // If data supplied, copy to temporary buffer
-  if (size <= 0)
-    return;
-
-  DCCPacket::DataPacket *dp = (DCCPacket::DataPacket *)buf;
-
-  // Check if packet has ADC data
-  if (GET_TYPE(ntohs(dp->hdr)) != RESP_TYPE_ADC_DATA)
-    return;
-
-  const unsigned int scnt = ntohs(dp->scnt);
-  if ((scnt <= 8) && (ntohs(dp->samp[0]) == 0) && (ntohs(dp->samp[1]) == 0))
-    return; // empty data
-  if ((scnt <= 12) &&
-      ((ntohs(dp->samp[0]) == 0x11ff) || (ntohs(dp->samp[1]) == 0x11ff)))
-    return; // Data starting at 511 bin
-
-  unsigned short fec, asic, channel;
-  const unsigned short arg1 = GET_RB_ARG1(ntohs(dp->args));
-  const unsigned short arg2 = GET_RB_ARG2(ntohs(dp->args));
-
-  int physChannel =
-      DCCPacket::Arg12ToFecAsicChannel(arg1, arg2, fec, asic, channel);
-
-  if (physChannel < 0)
-    return;
-
-  if (runConfig.verboseLevel > RunConfig::Verbosity::Info)
-    std::cout << "FEC " << fec << " asic " << asic << " channel " << channel
-              << " physChann " << physChannel << "\n";
-
-  // bool compress = GET_RB_COMPRESS(ntohs(dp->args) );
-  std::vector<short> sData(512, 0);
-  short *sDataPtr = sData.data();
-
-  unsigned short timeBin = 0;
-
-  for (unsigned int i = 0; i < scnt && i < 511; i++) {
-    short data = ntohs(dp->samp[i]);
-    if ((data & 0xFE00) == 0x1000) {
-      timeBin = GET_CELL_INDEX(data);
-    } else if ((data & 0xF000) == 0) { // Check fastest method
-      if (timeBin < 512)
-        sDataPtr[timeBin] = std::move(data);
-      // if (timeBin < 512) sDataPtr[timeBin] = data;
-      // if (timeBin < 512) memcpy(&sData[timeBin],&data,sizeof(short));
-      // if (timeBin < 512) std::copy(&sData[timeBin],&sData[timeBin], &data);
-      timeBin++;
-    }
-  }
-
-  sEvent.AddSignal(physChannel, sData);
 }
 
 void FEMDAQDCC::PrintMonitoring(DCCPacket::DataPacket *pck) {

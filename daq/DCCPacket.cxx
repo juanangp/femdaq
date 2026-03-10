@@ -356,8 +356,16 @@ bool DCCPacket::TryExtractNextEvent(std::deque<uint16_t> &buffer, size_t &idx,
     }
 
     DataPacket *pck = (DCCPacket::DataPacket *)&buffer[idx];
-    size_t pckSize = (ntohs(pck->size) - 2) / sizeof(uint16_t);
-    idx += pckSize;
+    size_t pckSize = (ntohs(pck->size)) / sizeof(uint16_t);
+    if (pckSize == 0) {
+      std::cout << "Warning packet size is zero, data may be not aligned due "
+                   "to missing packets?"
+                << std::endl;
+      idx++;
+    } else
+      idx += pckSize;
+    // std::cout<<"Data packet pos "<<idx<<"/"<<buffSize<<"
+    // "<<pckSize<<std::endl;
   }
 
   if (!endOfEvent) {
@@ -396,7 +404,7 @@ void DCCPacket::ParseEventFromWords(std::vector<uint16_t> &event,
     }
 
     DataPacket *pck = (DCCPacket::DataPacket *)&event[idx];
-    const size_t pckSize = (ntohs(pck->size) - 2) / sizeof(uint16_t);
+    const size_t pckSize = ntohs(pck->size) / sizeof(uint16_t);
     idx += pckSize;
 
     const unsigned int scnt = ntohs(pck->scnt);

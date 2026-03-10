@@ -308,6 +308,9 @@ void FEMDAQARCFEM::EventBuilder() {
   std::vector<uint16_t> eventBuffer;
   eventBuffer.reserve(72 * 4 * 800);
 
+  for (auto &FEM : FEMArray)
+    FEM.bufferIndex = 0;
+
   while (!(emptyBuffer && stopEventBuilder)) {
     emptyBuffer = true;
     newEvent = true;
@@ -333,7 +336,7 @@ void FEMDAQARCFEM::EventBuilder() {
       sEvent.eventID = ev_count;
       sEvent.timestamp = (double)ts * 2.E-8 + runStartTime;
 
-      if (fileRoot) {
+      if (fileRoot && !sEvent.signalsID.empty()) {
         FillTree(sEvent.timestamp, lastTimeSaved);
 
         if (storedEvents % 100 == 0) {
@@ -344,8 +347,10 @@ void FEMDAQARCFEM::EventBuilder() {
       for (auto &FEM : FEMArray)
         FEM.pendingEvent = true;
 
-      ++storedEvents;
-      sEvent.Clear();
+      if (!sEvent.signalsID.empty()) {
+        ++storedEvents;
+        sEvent.Clear();
+      }
     }
 
     if (stopEventBuilder) {

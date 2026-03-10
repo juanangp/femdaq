@@ -21,7 +21,6 @@ public:
   void EventBuilder();
   bool SendCommand(const char *cmd, FEMProxy &FEM, int pckType = -1);
   void waitForTrigger();
-  void saveEvent(unsigned char *buf, int size);
   void PrintMonitoring(DCCPacket::DataPacket *pck);
 
 private:

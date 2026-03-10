@@ -296,7 +296,7 @@ uint32_t GetUInt32FromBuffer(uint16_t *&fr, int &sz_rd, bool BE) {
 }
 
 bool TryExtractNextEvent(std::deque<uint16_t> &buffer, size_t &idx,
-                         std::deque<uint16_t> &out) {
+                         std::vector<uint16_t> &out) {
 
   if (buffer.empty())
     return false;
@@ -355,7 +355,7 @@ bool TryExtractNextEvent(std::deque<uint16_t> &buffer, size_t &idx,
   return true;
 }
 
-void ParseEventFromWords(std::deque<uint16_t> &event, SignalEvent &sEvent,
+void ParseEventFromWords(std::vector<uint16_t> &event, SignalEvent &sEvent,
                          uint64_t &tS, uint32_t &ev_count) {
 
   if (event.empty())

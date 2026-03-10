@@ -202,8 +202,8 @@ uint32_t GetUInt32FromBuffer(uint16_t *&fr, int &sz_rd, bool BE = false);
 void HistoStat_Print(uint16_t *&fr, int &sz_rd, FILE *fp,
                      bool useBinCount = false);
 bool TryExtractNextEvent(std::deque<uint16_t> &buffer, size_t &idx,
-                         std::deque<uint16_t> &out);
-void ParseEventFromWords(std::deque<uint16_t> &event, SignalEvent &sEvent,
+                         std::vector<uint16_t> &out);
+void ParseEventFromWords(std::vector<uint16_t> &event, SignalEvent &sEvent,
                          uint64_t &tS, uint32_t &ev_count);
 void ConfigPacket_Print(uint16_t *fr, const uint16_t &size, FILE *fp = stdout);
 bool isDataFrame(uint16_t *fr);

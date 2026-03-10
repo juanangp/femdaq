@@ -305,13 +305,14 @@ void FEMDAQARCFEM::EventBuilder() {
   bool newEvent = true;
   bool emptyBuffer = true;
   int tC = 0;
+  std::vector<uint16_t> eventBuffer;
+  eventBuffer.reserve(72 * 4 * 800);
 
   while (!(emptyBuffer && stopEventBuilder)) {
     emptyBuffer = true;
     newEvent = true;
 
     for (auto &FEM : FEMArray) {
-      std::deque<uint16_t> eventBuffer;
       FEM.mutex_mem.lock();
       emptyBuffer &= FEM.buffer.empty();
       if (!FEM.buffer.empty()) {
@@ -325,6 +326,7 @@ void FEMDAQARCFEM::EventBuilder() {
       if (!FEM.pendingEvent)
         packetAPI.ParseEventFromWords(eventBuffer, sEvent, ts, ev_count);
       newEvent &= !FEM.pendingEvent; // Check if the event is pending
+      eventBuffer.clear();
     }
 
     if (newEvent) { // Save Event if closed

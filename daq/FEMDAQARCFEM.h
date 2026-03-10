@@ -8,8 +8,8 @@ public:
     bool (*isMFrame)(uint16_t *);
     bool (*isDataFrame)(uint16_t *);
     bool (*TryExtractNextEvent)(std::deque<uint16_t> &, size_t &,
-                                std::deque<uint16_t> &);
-    void (*ParseEventFromWords)(std::deque<uint16_t> &, SignalEvent &,
+                                std::vector<uint16_t> &);
+    void (*ParseEventFromWords)(std::vector<uint16_t> &, SignalEvent &,
                                 uint64_t &, uint32_t &);
     void (*DataPacket_Print)(uint16_t *, const uint16_t &, FILE *);
     void (*ConfigPacket_Print)(uint16_t *, const uint16_t &, FILE *);

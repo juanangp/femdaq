@@ -8,7 +8,7 @@
 
 class FEMProxy : public FEMSocket {
 public:
-  FEMProxy() = default;
+  FEMProxy() : buffer(500 * 72 * 4 * 800) { buffer.clear(); }
   ~FEMProxy() = default;
 
   FEMProxy(const FEMProxy &) = delete;

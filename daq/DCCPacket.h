@@ -1,8 +1,12 @@
-#ifndef DCC_PACKET_H
-#define DCC_PACKET_H
+#pragma once
 
 #include <cstdio>
+#include <deque>
 #include <netinet/in.h>
+#include <stdint.h>
+#include <vector>
+
+#include "SignalEvent.h"
 
 #define MAX_ETH_PACKET_DATA_SIZE 4096
 
@@ -173,10 +177,6 @@ typedef struct {
   unsigned short samp[PHISTO_SIZE]; // data storage area
 } PedestalHistoBinPacket;
 
-enum class packetReply { ERROR = -1, RETRY = 0, OK = 1 };
-enum class packetType { ASCII = 0, BINARY = 1 };
-enum class packetDataType { NONE = 0, EVENT = 1, PEDESTAL = 2 };
-
 void DataPacket_Print(DataPacket *pck, FILE *fp = stdout);
 void DCC_Data_Print(EndOfEventPacket *pck, FILE *fp = stdout);
 void DCC_Histogram_Print(HistogramPacket *pck, FILE *fp = stdout);
@@ -194,6 +194,8 @@ int Arg12ToFecAsicChannel(unsigned short arg1, unsigned short arg2,
 int Arg12ToFecAsic(unsigned short arg1, unsigned short arg2,
                    unsigned short &fec, unsigned short &asic,
                    unsigned short channel);
+bool TryExtractNextEvent(std::deque<uint16_t> &buffer, size_t &idx,
+                         std::vector<uint16_t> &out);
+void ParseEventFromWords(std::vector<uint16_t> &event, SignalEvent &sEvent,
+                         uint64_t &tS, uint32_t &ev_count);
 } // namespace DCCPacket
-
-#endif

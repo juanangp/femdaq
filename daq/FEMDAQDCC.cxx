@@ -4,6 +4,8 @@
 #include <filesystem>
 #include <sstream>
 
+std::atomic<bool> FEMDAQDCC::stopEventBuilder(false);
+
 FEMDAQDCC::Registrar::Registrar() {
   FEMDAQ::RegisterType(
       "DCC", [](RunConfig &cfg) { return std::make_unique<FEMDAQDCC>(cfg); });
@@ -55,7 +57,7 @@ void FEMDAQDCC::Pedestals(const std::vector<std::string> &flags) {
     for (auto fecID : fecs) {
       for (int a = 0; a < 4; a++) {
         sprintf(cmd, "hped acc %d %d %d:%d", fecID, a, 3, 78);
-        SendCommand(cmd);
+        SendCommand(cmd, FEM);
       }
     }
   }
@@ -65,13 +67,12 @@ void FEMDAQDCC::Pedestals(const std::vector<std::string> &flags) {
   for (auto fecID : fecs) {
     for (int a = 0; a < 4; a++) {
       sprintf(cmd, "hped getsummary %d %d %d:%d", fecID, a, 3, 78);
-      SendCommand(cmd, FEM, DCCPacket::packetType::BINARY, 1,
-                  DCCPacket::packetDataType::PEDESTAL); // Get summary
+      SendCommand(cmd, FEM, 1); // Get summary
       sprintf(cmd, "hped centermean %d %d %d:%d %d", fecID, a, 3, 78, mean);
-      SendCommand(cmd); // Set mean
+      SendCommand(cmd, FEM); // Set mean
       sprintf(cmd, "hped setthr %d %d %d:%d %d %.1f", fecID, a, 3, 78, mean,
               stdDev);
-      SendCommand(cmd); // Set thr
+      SendCommand(cmd, FEM); // Set thr
     }
   }
 }
@@ -94,20 +95,15 @@ void FEMDAQDCC::startDAQ(const std::vector<std::string> &flags) {
           << std::endl;
   }
 
-  sEvent.Clear();
   runStartTime = getCurrentTime();
-  double lastTimeSaved = runStartTime;
-  uint32_t ev_count = 0;
-  uint64_t ts = 0;
-
-  if (fileRoot)
-    WriteRunStartTime(runStartTime);
-
   stopRun = false;
   storedEvents = 0;
-  int eventID = 0;
 
+  stopEventBuilder = false;
+  eventBuilderThread = std::thread(&FEMDAQDCC::EventBuilder, this);
   UpdateRunThread = std::thread(&FEMDAQ::UpdateThread, this);
+
+  auto rS = std::chrono::high_resolution_clock::now();
 
   auto &FEM = FEMArray.front();
   const auto &fecs = runConfig.fems.front().fecs;
@@ -119,49 +115,128 @@ void FEMDAQDCC::startDAQ(const std::vector<std::string> &flags) {
     SendCommand("isobus 0x64", FEM); // SCA start
     if (internal)
       SendCommand("isobus 0x14", FEM);
-    sEvent.Clear();
-    sEvent.eventID = eventID;
     waitForTrigger();
     if (abrt)
       break;
     // Perform data acquisition phase, compress, accept size
-    sEvent.timestamp = getCurrentTime();
+    auto now = std::chrono::high_resolution_clock::now();
     for (auto fecID : fecs) {
       for (int a = 0; a < 4; a++) {
         sprintf(cmd, "areq %d %d %d %d %d", mode, fecID, a, 3, 78);
-        SendCommand(cmd, FEM, DCCPacket::packetType::BINARY, 0,
-                    DCCPacket::packetDataType::EVENT);
+        SendCommand(cmd, FEM, 0);
       }
     }
 
-    eventID++;
+    auto elapsed =
+        std::chrono::duration_cast<std::chrono::microseconds>(now - rS);
 
-    if (sEvent.signalsID.empty())
-      continue;
+    uint64_t us = static_cast<uint64_t>(elapsed.count()) &
+                  0xFFFFFFFFFFFFULL; // 48 bits mask
 
-    if (fileRoot) {
-      FillTree(sEvent.timestamp, lastTimeSaved);
+    uint16_t t1 = static_cast<uint16_t>((us >> 32) & 0xFFFF); // Bits 47-32
+    uint16_t t2 = static_cast<uint16_t>((us >> 16) & 0xFFFF); // Bits 31-16
+    uint16_t t3 = static_cast<uint16_t>(us & 0xFFFF);         // Bits 15-0
 
-      if (storedEvents % 100 == 0) {
-        CheckFileSize(sEvent.timestamp);
+    FEM.mutex_mem.lock();
+    FEM.buffer.insert(FEM.buffer.end(), 0xFFFF, 1); // Insert word to mark EOE
+    FEM.buffer.insert(FEM.buffer.end(), t1);        // Insert timeStamp 48 bits
+    FEM.buffer.insert(FEM.buffer.end(), t2);
+    FEM.buffer.insert(FEM.buffer.end(), t3);
+    FEM.mutex_mem.unlock();
+  }
+}
+
+void FEMDAQDCC::EventBuilder() {
+
+  auto &FEM = FEMArray.front();
+
+  double lastTimeSaved = runStartTime;
+  uint32_t ev_count = 0;
+  uint64_t ts = 0x0;
+
+  if (fileRoot)
+    WriteRunStartTime(runStartTime);
+
+  bool newEvent = true;
+  bool emptyBuffer = true;
+  int tC = 0;
+
+  std::vector<uint16_t> eventBuffer;
+  eventBuffer.reserve(6 * 72 * 4 * 800);
+
+  while (!(emptyBuffer && stopEventBuilder)) {
+
+    emptyBuffer = true;
+    newEvent = true;
+
+    FEM.mutex_mem.lock();
+    emptyBuffer = FEM.buffer.empty();
+    if (!emptyBuffer) {
+      FEM.pendingEvent = !DCCPacket::TryExtractNextEvent(
+          FEM.buffer, FEM.bufferIndex, eventBuffer);
+    }
+    FEM.mutex_mem.unlock();
+
+    if (!FEM.pendingEvent) {
+      DCCPacket::ParseEventFromWords(eventBuffer, sEvent, ts, ev_count);
+      eventBuffer.clear();
+      sEvent.eventID = ev_count;
+      sEvent.timestamp = (double)ts * 1.E-6 + runStartTime;
+
+      if (fileRoot) {
+        FillTree(sEvent.timestamp, lastTimeSaved);
+
+        if (storedEvents % 100 == 0) {
+          CheckFileSize(sEvent.timestamp);
+        }
       }
+
+      FEM.pendingEvent = true;
+
+      ++storedEvents;
+      sEvent.Clear();
     }
 
-    ++storedEvents;
-    sEvent.Clear();
+    if (stopEventBuilder) {
+      if (tC % 100 == 0) {
+        if (runConfig.verboseLevel >= RunConfig::Verbosity::Debug)
+          std::cout << "FEM " << FEM.femID << " Buffer size "
+                    << FEM.buffer.size() << std::endl;
+      }
+      tC++;
+      if (tC >= 500)
+        break;
+    }
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+  }
+
+  std::cout << "End of event builder " << storedEvents << " events acquired"
+            << std::endl;
+
+  if (!FEM.buffer.empty()) {
+    std::cout << "FEM " << FEM.femID << " Buffer size left "
+              << FEM.buffer.size() << std::endl;
+    if (runConfig.verboseLevel >= RunConfig::Verbosity::Debug) {
+      fprintf(FEM.logFile, "------DEBUG BUFFER FRAMES LEFT-------\n");
+      for (const auto &word : FEM.buffer)
+        fprintf(FEM.logFile, "%08X\n", word);
+    }
   }
 
   if (fileRoot) {
-    WriteRunEndTime(getCurrentTime());
+    WriteRunEndTime(runEndTime);
   }
-
-  std::cout << "End of DAQ " << storedEvents << " events acquired" << std::endl;
 }
 
 void FEMDAQDCC::stopDAQ() {
 
   if (UpdateRunThread.joinable())
     UpdateRunThread.join();
+
+  stopEventBuilder = true;
+  if (eventBuilderThread.joinable())
+    eventBuilderThread.join();
 }
 
 void FEMDAQDCC::SendCommand(const char *cmd) {
@@ -188,10 +263,8 @@ void FEMDAQDCC::SendCommand(const char *cmd) {
   }
 }
 
-DCCPacket::packetReply
-FEMDAQDCC::SendCommand(const char *cmd, FEMProxy &FEM,
-                       DCCPacket::packetType pckType, size_t nPackets,
-                       DCCPacket::packetDataType dataType) {
+bool FEMDAQDCC::SendCommand(const char *cmd, FEMProxy &FEM, int pckType) {
+  // pckType = -1 ASCII, >=0 Binary
 
   const int e =
       sendto(FEM.client, cmd, strlen(cmd), 0, (struct sockaddr *)&(FEM.target),
@@ -215,7 +288,7 @@ FEMDAQDCC::SendCommand(const char *cmd, FEMProxy &FEM,
   bool done = false;
   int length = 0;
   size_t pckCnt = 1;
-  uint8_t buf_rcv[8192];
+  uint16_t buf_rcv[8192 / sizeof(uint16_t)];
   uint8_t *buf_ual;
 
   while (!done) {
@@ -239,65 +312,60 @@ FEMDAQDCC::SendCommand(const char *cmd, FEMProxy &FEM,
 
         } else {
           if (abrt)
-            return DCCPacket::packetReply::ERROR;
+            return false;
           std::string error =
               "recvfrom failed: " + std::string(strerror(errno));
           throw std::runtime_error(error);
         }
       }
       if (abrt)
-        return DCCPacket::packetReply::ERROR;
+        return false;
       cnt++;
     } while (length < 0 && duration.count() < 10);
 
     if (duration.count() >= 10 || length < 0) {
-      std::cout << "No reply after " << duration.count()
-                << " seconds, missing packets are expected" << std::endl;
-      return DCCPacket::packetReply::ERROR;
+      std::string error = "TIMEOUT: No reply after " +
+                          std::to_string(duration.count()) + " seconds";
+      throw std::runtime_error(error);
     }
 
     // if the first 2 bytes are null, UDP datagram is aligned on next 32-bit
     // boundary, so skip these first two bytes
-    if ((buf_rcv[0] == 0) && (buf_rcv[1] == 0)) {
-      buf_ual = &buf_rcv[2];
+    int index = 0;
+    if ((buf_rcv[0] == 0)) {
+      buf_ual = buf_ual = reinterpret_cast<uint8_t *>(&buf_rcv[1]);
       length -= 2;
+      index = 1;
     } else {
-      buf_ual = &buf_rcv[0];
+      buf_ual = reinterpret_cast<uint8_t *>(&buf_rcv[0]);
     }
 
-    if ((*buf_ual == '-') && strncmp(cmd, "wait", 4) == 0) {
-      return DCCPacket::packetReply::RETRY;
-    } else if ((*buf_ual == '-')) { // ERROR ASCII packet
+    // ERROR ASCII packet
+    if (*buf_ual == '-') {
+      if (strncmp(cmd, "wait", 4) == 0)
+        return true;
       *(buf_ual + length) = '\0';
       fprintf(stdout, "--------ERROR packet---------: %s\n", buf_ual);
       if (FEM.logFile)
         fprintf(FEM.logFile, "--------ERROR packet---------: %s\n", buf_ual);
-      return DCCPacket::packetReply::ERROR;
+      return false;
     }
 
-    // show packet if desired
-    if (runConfig.verboseLevel > RunConfig::Verbosity::Info &&
-        pckType == DCCPacket::packetType::BINARY) {
-      if (FEM.logFile)
-        fprintf(FEM.logFile, ">>> dcc().rep(): %d bytes of data \n", length);
-      DCCPacket::DataPacket *data_pk = (DCCPacket::DataPacket *)buf_ual;
-      PrintMonitoring(data_pk);
-    } else if (pckType != DCCPacket::packetType::BINARY) {
-      if (logCmd) {
-        *(buf_ual + length) = '\0';
-        if (runConfig.verboseLevel > RunConfig::Verbosity::Info)
-          fprintf(stdout, "dcc().rep(): %s", buf_ual);
-        if (FEM.logFile)
-          fprintf(FEM.logFile, ">>> dcc().rep(): %s", buf_ual);
-      }
-    }
-
-    if (pckType == DCCPacket::packetType::BINARY) { // DAQ packet
+    if (pckType >= 0) { // Data packet
 
       DCCPacket::DataPacket *data_pkt = (DCCPacket::DataPacket *)buf_ual;
 
-      if (dataType == DCCPacket::packetDataType::EVENT) {
-        saveEvent(buf_ual, length);
+      if (GET_TYPE(ntohs(data_pkt->hdr)) == RESP_TYPE_ADC_DATA) {
+        const size_t size = length / sizeof(uint16_t);
+        FEM.mutex_mem.lock();
+        FEM.buffer.insert(FEM.buffer.end(), &buf_rcv[index],
+                          &buf_rcv[size - 2]); // Skip CRC32
+        const size_t bufferSize = FEM.buffer.size();
+        FEM.mutex_mem.unlock();
+
+        // saveEvent(buf_ual, length);
+        if (runConfig.verboseLevel > RunConfig::Verbosity::Info)
+          PrintMonitoring(data_pkt);
       } else {
         PrintMonitoring(data_pkt);
       }
@@ -305,28 +373,33 @@ FEMDAQDCC::SendCommand(const char *cmd, FEMProxy &FEM,
       // Check End Of Event
       if (GET_FRAME_TY_V2(ntohs(data_pkt->dcchdr)) & FRAME_FLAG_EOEV ||
           GET_FRAME_TY_V2(ntohs(data_pkt->dcchdr)) & FRAME_FLAG_EORQ ||
-          (nPackets > 0 && pckCnt >= nPackets)) {
+          (pckType > 0 && pckCnt >= pckType)) {
         done = true;
       }
 
-    } else {
-      done = true; // ASCII Packet, check response?
+    } else { // ASCII Packet
+      if (logCmd) {
+        *(buf_ual + length) = '\0';
+        if (runConfig.verboseLevel > RunConfig::Verbosity::Info)
+          fprintf(stdout, "dcc().rep(): %s", buf_ual);
+        if (FEM.logFile)
+          fprintf(FEM.logFile, ">>> dcc().rep(): %s", buf_ual);
+      }
+      done = true;
     }
-
     pckCnt++;
   }
-  return DCCPacket::packetReply::OK;
+  return false;
 }
 
 void FEMDAQDCC::waitForTrigger() { // Wait till trigger is acquired
   auto &FEM = FEMArray.front();
 
-  DCCPacket::packetReply reply;
+  bool retry = false;
   do {
-    reply =
+    retry =
         SendCommand("wait 1000000", FEM); // Wait for the event to be acquired
-  } while (reply == DCCPacket::packetReply::RETRY &&
-           !abrt); // Infinite loop till aborted or wait succeed
+  } while (retry && !abrt); // Infinite loop till aborted or wait succeed
 }
 
 void FEMDAQDCC::saveEvent(unsigned char *buf, int size) {

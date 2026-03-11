@@ -61,6 +61,7 @@ FEMDAQARCFEM::~FEMDAQARCFEM() {
 void FEMDAQARCFEM::SendDAQCmdThread(FEMProxy &FEM) {
 
   char daq_cmd[40];
+  FEM.tmpBuffer.clear();
   FEM.daq_credit = 0;
   const uint32_t reqFrames = 272 * 20;
   uint8_t seq = 0x00;
@@ -183,14 +184,13 @@ void FEMDAQARCFEM::FEMReceiverThread(FEMProxy &FEM) {
       // const std::deque<uint16_t> frame (&buf_rcv[1], &buf_rcv[size -1]);
       FEM.daq_credit++;
       FEM.mutex_mem.lock();
-      FEM.buffer.insert(FEM.buffer.end(), &buf_rcv[1], &buf_rcv[size - offset]);
-      const size_t bufferSize = FEM.buffer.size();
+      FEM.tmpBuffer.insert(FEM.tmpBuffer.end(), &buf_rcv[1],
+                           &buf_rcv[size - offset]);
       FEM.mutex_mem.unlock();
       if (runConfig.verboseLevel >= RunConfig::Verbosity::Debug) {
         PrintMonitoring(&buf_rcv[1], size - 1, FEM);
         std::cout << "FEM " << FEM.femID << " Packet buffered with size "
-                  << (int)size - 1 << " queue size: " << bufferSize
-                  << std::endl;
+                  << (int)size - offset << std::endl;
       }
     } else {
       PrintMonitoring(&buf_rcv[1], size - 1, FEM);
@@ -306,10 +306,14 @@ void FEMDAQARCFEM::EventBuilder() {
   bool emptyBuffer = true;
   int tC = 0;
   std::vector<uint16_t> eventBuffer;
-  eventBuffer.reserve(72 * 4 * 800);
+  eventBuffer.reserve(72 * 4 * 600);
 
-  for (auto &FEM : FEMArray)
+  // Initialize FEMs
+  for (auto &FEM : FEMArray) {
     FEM.bufferIndex = 0;
+    FEM.pendingEvent = true;
+    FEM.buffer.clear();
+  }
 
   while (!(emptyBuffer && stopEventBuilder)) {
     emptyBuffer = true;
@@ -317,15 +321,22 @@ void FEMDAQARCFEM::EventBuilder() {
 
     for (auto &FEM : FEMArray) {
       FEM.mutex_mem.lock();
-      emptyBuffer &= FEM.buffer.empty();
-      if (!FEM.buffer.empty()) {
-        if (FEM.pendingEvent) { // Wait till we reach end of event for all the
-                                // ARC
-          FEM.pendingEvent = !packetAPI.TryExtractNextEvent(
-              FEM.buffer, FEM.bufferIndex, eventBuffer);
-        }
+      if (!FEM.tmpBuffer.empty()) {
+        // Data is moved from tmp buffer to avoid lock
+        FEM.buffer.insert(FEM.buffer.end(),
+                          std::make_move_iterator(FEM.tmpBuffer.begin()),
+                          std::make_move_iterator(FEM.tmpBuffer.end()));
+        FEM.tmpBuffer.clear();
       }
       FEM.mutex_mem.unlock();
+
+      emptyBuffer &= FEM.buffer.empty();
+
+      if (!FEM.buffer.empty() && FEM.pendingEvent) {
+        FEM.pendingEvent = !packetAPI.TryExtractNextEvent(
+            FEM.buffer, FEM.bufferIndex, eventBuffer);
+      }
+
       if (!FEM.pendingEvent)
         packetAPI.ParseEventFromWords(eventBuffer, sEvent, ts, ev_count);
       newEvent &= !FEM.pendingEvent; // Check if the event is pending
@@ -334,7 +345,14 @@ void FEMDAQARCFEM::EventBuilder() {
 
     if (newEvent) { // Save Event if closed
       sEvent.eventID = ev_count;
-      sEvent.timestamp = (double)ts * 2.E-8 + runStartTime;
+      sEvent.timestamp = (double)ts * 1.E-8 + runStartTime;
+
+      if (storedEvents == 0) {
+        std::cout << "Start time: " << GetTimeStampFromUnixTime(runStartTime)
+                  << " Last ev tS: "
+                  << GetTimeStampFromUnixTime(sEvent.timestamp) << " "
+                  << sEvent.timestamp - runStartTime << std::endl;
+      }
 
       if (fileRoot && !sEvent.signalsID.empty()) {
         FillTree(sEvent.timestamp, lastTimeSaved);
@@ -364,11 +382,17 @@ void FEMDAQARCFEM::EventBuilder() {
       if (tC >= 500)
         break;
     }
-    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
   }
 
-  std::cout << "End of event builder " << storedEvents << " events acquired"
-            << std::endl;
+  std::cout << "End of event builder " << storedEvents << " events acquired "
+            << runEndTime - runStartTime
+            << " Avg rate: " << storedEvents / (runEndTime - runStartTime)
+            << " Hz" << std::endl;
+
+  // std::cout<<"End time: " << GetTimeStampFromUnixTime(runEndTime) <<" Last ev
+  // tS: " << GetTimeStampFromUnixTime(sEvent.timestamp) <<" " << runEndTime -
+  // sEvent.timestamp << std::endl;
 
   for (auto &FEM : FEMArray)
     if (!FEM.buffer.empty()) {
@@ -381,6 +405,9 @@ void FEMDAQARCFEM::EventBuilder() {
     }
 
   if (fileRoot) {
+    if (sEvent.timestamp > runEndTime)
+      runEndTime = sEvent.timestamp;
+
     WriteRunEndTime(runEndTime);
   }
 }

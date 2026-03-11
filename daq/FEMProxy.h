@@ -8,7 +8,7 @@
 
 class FEMProxy : public FEMSocket {
 public:
-  FEMProxy() : buffer(500 * 72 * 4 * 800) { buffer.clear(); }
+  FEMProxy() { tmpBuffer.reserve(500 * 72 * 4 * 520); }
   ~FEMProxy() = default;
 
   FEMProxy(const FEMProxy &) = delete;
@@ -20,6 +20,7 @@ public:
     femID = other.femID;
     bufferIndex = other.bufferIndex;
     buffer = std::move(other.buffer);
+    tmpBuffer = std::move(other.tmpBuffer);
     cmd_sent.store(other.cmd_sent.load());
     cmd_rcv.store(other.cmd_rcv.load());
     daq_credit.store(other.daq_credit.load());
@@ -33,6 +34,7 @@ public:
       femID = other.femID;
       bufferIndex = other.bufferIndex;
       buffer = std::move(other.buffer);
+      tmpBuffer = std::move(other.tmpBuffer);
 
       cmd_sent.store(other.cmd_sent.load());
       cmd_rcv.store(other.cmd_rcv.load());
@@ -50,6 +52,7 @@ public:
   int femID = 0;
   size_t bufferIndex = 0;
 
+  std::vector<uint16_t> tmpBuffer;
   std::deque<uint16_t> buffer;
 
   FILE *logFile = nullptr;

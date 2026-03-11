@@ -106,6 +106,7 @@ void FEMDAQDCC::startDAQ(const std::vector<std::string> &flags) {
   auto rS = std::chrono::high_resolution_clock::now();
 
   auto &FEM = FEMArray.front();
+  FEM.tmpBuffer.clear();
   const auto &fecs = runConfig.fems.front().fecs;
   char cmd[200];
 
@@ -128,20 +129,20 @@ void FEMDAQDCC::startDAQ(const std::vector<std::string> &flags) {
     }
 
     auto elapsed =
-        std::chrono::duration_cast<std::chrono::microseconds>(now - rS);
+        std::chrono::duration_cast<std::chrono::nanoseconds>(now - rS);
 
-    uint64_t us = static_cast<uint64_t>(elapsed.count()) &
-                  0xFFFFFFFFFFFFULL; // 48 bits mask
+    uint64_t ns10 = static_cast<uint64_t>(elapsed.count() / 10) &
+                    0xFFFFFFFFFFFFULL; // 48 bits mask
 
-    uint16_t t1 = static_cast<uint16_t>((us >> 32) & 0xFFFF); // Bits 47-32
-    uint16_t t2 = static_cast<uint16_t>((us >> 16) & 0xFFFF); // Bits 31-16
-    uint16_t t3 = static_cast<uint16_t>(us & 0xFFFF);         // Bits 15-0
+    uint16_t t1 = static_cast<uint16_t>((ns10 >> 32) & 0xFFFF); // Bits 47-32
+    uint16_t t2 = static_cast<uint16_t>((ns10 >> 16) & 0xFFFF); // Bits 31-16
+    uint16_t t3 = static_cast<uint16_t>(ns10 & 0xFFFF);         // Bits 15-0
 
     FEM.mutex_mem.lock();
-    FEM.buffer.emplace_back(0xFFFF); // Insert word to mark EOE
-    FEM.buffer.emplace_back(t1);     // Insert timeStamp 48 bits
-    FEM.buffer.emplace_back(t2);
-    FEM.buffer.emplace_back(t3);
+    FEM.tmpBuffer.emplace_back(0xFFFF); // Insert word to mark EOE
+    FEM.tmpBuffer.emplace_back(t1);     // Insert timeStamp 48 bits
+    FEM.tmpBuffer.emplace_back(t2);
+    FEM.tmpBuffer.emplace_back(t3);
     FEM.mutex_mem.unlock();
   }
 }
@@ -158,31 +159,40 @@ void FEMDAQDCC::EventBuilder() {
     WriteRunStartTime(runStartTime);
 
   bool newEvent = false;
-  bool emptyBuffer = false;
+  bool emptyBuffer = true;
   int tC = 0;
 
   std::vector<uint16_t> eventBuffer;
-  eventBuffer.reserve(6 * 72 * 4 * 800);
+  eventBuffer.reserve(6 * 72 * 4 * 600);
 
   FEM.bufferIndex = 0;
+  FEM.buffer.clear();
 
   std::cout << "Start of event builder" << std::endl;
 
   while (!(emptyBuffer && stopEventBuilder)) {
 
     FEM.mutex_mem.lock();
+    if (!FEM.tmpBuffer.empty()) {
+      FEM.buffer.insert(FEM.buffer.end(),
+                        std::make_move_iterator(FEM.tmpBuffer.begin()),
+                        std::make_move_iterator(FEM.tmpBuffer.end()));
+      FEM.tmpBuffer.clear();
+    }
+    FEM.mutex_mem.unlock();
+
     emptyBuffer = FEM.buffer.empty();
+
     if (!emptyBuffer) {
       newEvent = DCCPacket::TryExtractNextEvent(FEM.buffer, FEM.bufferIndex,
                                                 eventBuffer);
     }
-    FEM.mutex_mem.unlock();
 
     if (newEvent) {
       DCCPacket::ParseEventFromWords(eventBuffer, sEvent, ts, ev_count);
       eventBuffer.clear();
       sEvent.eventID = ev_count;
-      sEvent.timestamp = (double)ts * 1.E-6 + runStartTime;
+      sEvent.timestamp = (double)ts * 1.E-8 + runStartTime;
 
       // Do not fill empty events
       if (fileRoot && !sEvent.signalsID.empty()) {
@@ -213,7 +223,7 @@ void FEMDAQDCC::EventBuilder() {
         break;
     }
 
-    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
   }
 
   std::cout << "End of event builder: " << storedEvents << " events stored and "
@@ -224,8 +234,11 @@ void FEMDAQDCC::EventBuilder() {
               << FEM.buffer.size() << std::endl;
     if (runConfig.verboseLevel >= RunConfig::Verbosity::Debug) {
       fprintf(FEM.logFile, "------DEBUG BUFFER FRAMES LEFT-------\n");
-      for (const auto &word : FEM.buffer)
+      fprintf(stdout, "------DEBUG BUFFER FRAMES LEFT-------\n");
+      for (const auto &word : FEM.buffer) {
         fprintf(FEM.logFile, "%08X\n", word);
+        fprintf(stdout, "%08X\n", word);
+      }
     }
   }
 
@@ -362,9 +375,8 @@ bool FEMDAQDCC::SendCommand(const char *cmd, FEMProxy &FEM, int pckType) {
       if (GET_TYPE(ntohs(data_pkt->hdr)) == RESP_TYPE_ADC_DATA) {
         const size_t pckSize = (ntohs(data_pkt->size)) / sizeof(uint16_t);
         FEM.mutex_mem.lock();
-        FEM.buffer.insert(FEM.buffer.end(), &buf_rcv[index],
-                          &buf_rcv[index + pckSize]);
-        const size_t bufferSize = FEM.buffer.size();
+        FEM.tmpBuffer.insert(FEM.tmpBuffer.end(), &buf_rcv[index],
+                             &buf_rcv[index + pckSize]);
         FEM.mutex_mem.unlock();
 
         if (runConfig.verboseLevel > RunConfig::Verbosity::Info)

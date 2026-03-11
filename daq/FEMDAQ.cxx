@@ -323,13 +323,14 @@ void FEMDAQ::UpdateThread() {
     const double elapsed = eventTime - prevEventTime;
     const double runElapsedTime = eventTime - runStartTime;
     auto tmpstm = GetTimeStampFromUnixTime(eventTime);
+    const int evCount = storedEvents.load();
 
-    std::cout << tmpstm << " Total events: " << storedEvents
-              << " Rate: " << (storedEvents - prevEvCount) / elapsed << " Hz "
+    std::cout << tmpstm << " Total events: " << evCount
+              << " Rate: " << (evCount - prevEvCount) / elapsed << " Hz "
               << "Run time " << FormatElapsedTime(runElapsedTime) << std::endl;
-    prevEvCount = storedEvents.load();
+    prevEvCount = evCount;
     prevEventTime = eventTime;
-    if (runConfig.nEvents > 0 && storedEvents.load() >= runConfig.nEvents) {
+    if (runConfig.nEvents > 0 && evCount >= runConfig.nEvents) {
       stopRun = true;
       break;
     } else if (runConfig.maxTimeSeconds > 0 &&

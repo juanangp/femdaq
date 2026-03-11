@@ -531,9 +531,18 @@ public:
   void UpdateRange(Long_t) {
     double newMax = fSpecMaxEntry->GetNumber();
     std::cout << "Range updated " << newMax << std::endl;
-    if (fSpectra) {
-      fSpectra->SetBins(2048, 0, newMax);
+    if (fSpectra == nullptr)
+      return;
+
+    fSpectra->SetBins(2048, 0, newMax);
+    fSpectra->Set(2048 + 2);
+    fMainCanvas->GetCanvas()->cd(1);
+    fSpectra->Reset();
+
+    if (fMainCanvas) {
       fMainCanvas->GetCanvas()->cd(1);
+      fSpectra->Draw("HIST"); // Re-dibujamos para asegurar que el Pad use la
+                              // nueva estructura
       gPad->Modified();
       gPad->Update();
     }

@@ -41,6 +41,7 @@ private:
   TGNumberEntry *fPulseStart, *fPulseEnd;
   TGNumberEntry *fSigmaThr;
   TGNumberEntry *fStepSize;
+  TGNumberEntry *fSpecMaxEntry;
 
   TChain *fChain = nullptr;
   TTreeReader *fReader = nullptr;
@@ -84,7 +85,8 @@ private:
 public:
   DAQGUI() : TGMainFrame(gClient->GetRoot(), 1200, 900) {
 
-    fSpectra = new TH1F("Spectra", "Total Area;Area;Counts", 2048, 0, 3000000);
+    fSpectra = new TH1F("Spectra", "Total Amplitude;Amplitude;Counts", 2048, 0,
+                        100000);
     fHitMap = new TH2F("HitMap", "HitMap;X;Y", 1, 0, 1, 1, 0, 1);
     fRateGraph = new TGraph();
     fRateGraph->SetTitle("Rate;Time [s];Rate [Hz]");
@@ -150,6 +152,15 @@ public:
     fSigmaThr =
         new TGNumberEntry(leftFrame, fSThr, 5, -1, TGNumberFormat::kNESRealOne);
     leftFrame->AddFrame(fSigmaThr, btnL);
+
+    // --- Histogram Range ---
+    leftFrame->AddFrame(new TGLabel(leftFrame, "Spectra Max Range:"), labL);
+    fSpecMaxEntry =
+        new TGNumberEntry(leftFrame, 100000, 8, -1, TGNumberFormat::kNESInteger,
+                          TGNumberFormat::kNEAAnyNumber);
+    fSpecMaxEntry->Connect("ValueSet(Long_t)", "DAQGUI", this,
+                           "UpdateRange(Long_t)");
+    leftFrame->AddFrame(fSpecMaxEntry, btnL);
 
     leftFrame->AddFrame(new TGLabel(leftFrame, "Step Size"), labL);
     fStepSize =
@@ -217,6 +228,7 @@ public:
           << (int)fPulseEnd->GetNumber() << "\n";
       cfg << fSigmaThr->GetNumber() << std::endl;
       cfg << (int)fStepSize->GetNumber() << std::endl;
+      cfg << (int)fSpecMaxEntry->GetNumber() << "\n";
       cfg.close();
     }
   }
@@ -247,6 +259,10 @@ public:
         fSigmaThr->SetNumber(std::stod(line));
       if (std::getline(cfg, line))
         fStepSize->SetNumber(std::stoi(line));
+      if (std::getline(cfg, line)) {
+        fSpecMaxEntry->SetNumber(std::stoi(line));
+        UpdateRange(0);
+      }
 
       cfg.close();
       if (!decoPath.empty())
@@ -271,12 +287,28 @@ public:
     if (nBase <= 0)
       return;
 
+    nBase = 0;
+
     for (int i = bS_idx; i < bE_idx; i++) {
+      if (p[i] == 0)
+        continue;
       bL += p[i];
       bS += p[i] * p[i];
+      nBase++;
     }
-    bL /= nBase;
-    bS = sqrt(fabs(bS / nBase - bL * bL));
+
+    if (nBase == 0) {
+      auto it =
+          std::find_if(p.begin(), p.end(), [](short val) { return val != 0; });
+      if (it != p.end()) {
+        bL = *it;
+      } else {
+        return;
+      }
+    } else {
+      bL /= nBase;
+      bS = sqrt(fabs(bS / nBase - bL * bL));
+    }
 
     auto maxIt = std::max_element(p.begin() + pS_idx, p.begin() + pE_idx);
     mP = std::distance(p.begin(), maxIt);
@@ -424,7 +456,8 @@ public:
       } else if (fEntry % stepSize == 0) {
         double dt = fTimestamp - fTimeRateStart;
         if (dt > 0)
-          fRateGraph->SetPoint(fRatePoints++, fTimestamp,
+          fRateGraph->SetPoint(fRatePoints++,
+                               (fTimestamp + fTimeRateStart) / 2.,
                                (double)stepSize / dt);
         fTimeRateStart = fTimestamp;
       }
@@ -438,7 +471,7 @@ public:
 
       // ... [Rest of the analysis logic: Pulse loop, Spectra fill, HitMap fill]
       // ...
-      double totArea = 0, areaX = 0, areaY = 0, posX = 0, posY = 0;
+      double totAmp = 0, ampX = 0, ampY = 0, posX = 0, posY = 0;
       for (size_t s = 0; s < fSignalsID->size(); s++) {
         int sID = fSignalsID->at(s);
         std::vector<short> pulse(fPulses->begin() + s * 512,
@@ -447,17 +480,17 @@ public:
         int maxP;
         GetParamsFromPulse(pulse, amp, area, maxP);
         if (area > 0 && amp > 0) {
-          totArea += area;
+          totAmp += amp;
           auto it = fDecodingMap.find(sID);
           if (it != fDecodingMap.end()) {
             int pos = it->second;
             int ch = pos % fNChannels;
             if (pos / fNChannels == 0) {
-              posX += area * ch;
-              areaX += area;
+              posX += amp * ch;
+              ampX += amp;
             } else {
-              posY += area * ch;
-              areaY += area;
+              posY += amp * ch;
+              ampY += amp;
             }
           }
         }
@@ -473,10 +506,10 @@ public:
           fStacks->Add(h);
         }
       }
-      if (totArea)
-        fSpectra->Fill(totArea);
-      if (areaX > 0 && areaY > 0)
-        fHitMap->Fill(posX / areaX, posY / areaY);
+      if (totAmp)
+        fSpectra->Fill(totAmp);
+      if (ampX > 0 && ampY > 0)
+        fHitMap->Fill(posX / ampX, posY / ampY);
 
       fEntry++;
     }
@@ -493,6 +526,17 @@ public:
     if (fStacks)
       fStacks->Draw("nostack,l");
     can->Update();
+  }
+
+  void UpdateRange(Long_t) {
+    double newMax = fSpecMaxEntry->GetNumber();
+    std::cout << "Range updated " << newMax << std::endl;
+    if (fSpectra) {
+      fSpectra->SetBins(2048, 0, newMax);
+      fMainCanvas->GetCanvas()->cd(1);
+      gPad->Modified();
+      gPad->Update();
+    }
   }
 
   void ManualReset() {

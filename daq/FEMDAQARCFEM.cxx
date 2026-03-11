@@ -136,7 +136,7 @@ void FEMDAQARCFEM::waitForCmd(FEMProxy &FEM) {
   auto start = std::chrono::steady_clock::now();
 
   while (FEM.cmd_rcv < FEM.cmd_sent) {
-    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
 
     auto now = std::chrono::steady_clock::now();
     // 10 seconds timeout
@@ -385,14 +385,14 @@ void FEMDAQARCFEM::EventBuilder() {
     std::this_thread::sleep_for(std::chrono::milliseconds(2));
   }
 
-  std::cout << "End of event builder " << storedEvents << " events acquired "
-            << runEndTime - runStartTime
+  std::cout << "End of event builder " << storedEvents << " events acquired in "
+            << runEndTime - runStartTime << " s"
             << " Avg rate: " << storedEvents / (runEndTime - runStartTime)
             << " Hz" << std::endl;
 
-  // std::cout<<"End time: " << GetTimeStampFromUnixTime(runEndTime) <<" Last ev
-  // tS: " << GetTimeStampFromUnixTime(sEvent.timestamp) <<" " << runEndTime -
-  // sEvent.timestamp << std::endl;
+  std::cout << "End time: " << GetTimeStampFromUnixTime(runEndTime)
+            << " Last evtS: " << GetTimeStampFromUnixTime(sEvent.timestamp)
+            << " " << runEndTime - sEvent.timestamp << std::endl;
 
   for (auto &FEM : FEMArray)
     if (!FEM.buffer.empty()) {

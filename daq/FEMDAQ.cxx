@@ -313,23 +313,24 @@ void FEMDAQ::FillTree(const double eventTime, double &lastTimeSaved) {
 
 void FEMDAQ::UpdateThread() {
 
-  double eventTime = getCurrentTime();
-  double prevEventTime = eventTime;
+  double rateTime = getCurrentTime();
+  double prevRateTime = rateTime;
   int prevEvCount = storedEvents.load();
 
   while (!abrt && !stopRun) {
     std::this_thread::sleep_for(std::chrono::seconds(5));
-    double eventTime = getCurrentTime();
-    const double elapsed = eventTime - prevEventTime;
-    const double runElapsedTime = eventTime - runStartTime;
-    auto tmpstm = GetTimeStampFromUnixTime(eventTime);
+    double rateTime = getCurrentTime();
+    const double elapsed = rateTime - prevRateTime;
+    const double runElapsedTime = rateTime - runStartTime;
+    auto tmpstm = GetTimeStampFromUnixTime(rateTime);
+    const int evCount = storedEvents.load();
 
-    std::cout << tmpstm << " Total events: " << storedEvents
-              << " Rate: " << (storedEvents - prevEvCount) / elapsed << " Hz "
+    std::cout << tmpstm << " Total events: " << evCount
+              << " Rate: " << (evCount - prevEvCount) / elapsed << " Hz "
               << "Run time " << FormatElapsedTime(runElapsedTime) << std::endl;
-    prevEvCount = storedEvents.load();
-    prevEventTime = eventTime;
-    if (runConfig.nEvents > 0 && storedEvents.load() >= runConfig.nEvents) {
+    prevEvCount = evCount;
+    prevRateTime = rateTime;
+    if (runConfig.nEvents > 0 && evCount >= runConfig.nEvents) {
       stopRun = true;
       break;
     } else if (runConfig.maxTimeSeconds > 0 &&

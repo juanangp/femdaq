@@ -338,3 +338,107 @@ int DCCPacket::Arg12ToFecAsic(unsigned short arg1, unsigned short arg2,
 
   return physChannel;
 }
+
+bool DCCPacket::TryExtractNextEvent(std::deque<uint16_t> &buffer, size_t &idx,
+                                    std::vector<uint16_t> &out) {
+
+  if (buffer.empty())
+    return false;
+
+  bool endOfEvent = false;
+  const size_t buffSize = buffer.size();
+
+  while (idx < buffSize) {
+    if (buffer[idx] == 0xFFFF) {
+      idx += 4;
+      endOfEvent = true;
+      break;
+    }
+
+    DataPacket *pck = (DCCPacket::DataPacket *)&buffer[idx];
+    size_t pckSize = (ntohs(pck->size)) / sizeof(uint16_t);
+    if (pckSize == 0) {
+      std::cout << "Warning packet size is zero, data may be not aligned due "
+                   "to missing packets?"
+                << std::endl;
+      idx++;
+    } else
+      idx += pckSize;
+    // std::cout<<"Data packet pos "<<idx<<"/"<<buffSize<<"
+    // "<<pckSize<<std::endl;
+  }
+
+  if (!endOfEvent) {
+    return false; // incomplete event
+  }
+
+  out.assign(buffer.begin(), buffer.begin() + idx);
+  buffer.erase(buffer.begin(), buffer.begin() + idx);
+
+  idx = 0;
+
+  return true;
+}
+
+void DCCPacket::ParseEventFromWords(std::vector<uint16_t> &event,
+                                    SignalEvent &sEvent, uint64_t &tS,
+                                    uint32_t &ev_count) {
+
+  if (event.empty())
+    return;
+
+  size_t idx = 0;
+  const size_t buffSize = event.size();
+
+  while (idx < buffSize) {
+    if (event[idx] == 0xFFFF) {
+      // Decode 48 bit timestamp
+      uint16_t t1 = event[idx + 1]; // Bits 47-32 (MSB)
+      uint16_t t2 = event[idx + 2]; // Bits 31-16
+      uint16_t t3 = event[idx + 3]; // Bits 15-0 (LSB)
+
+      tS = (static_cast<uint64_t>(t1) << 32) |
+           (static_cast<uint64_t>(t2) << 16) | static_cast<uint64_t>(t3);
+      idx += 4;
+      break;
+    }
+
+    DataPacket *pck = (DCCPacket::DataPacket *)&event[idx];
+    const size_t pckSize = ntohs(pck->size) / sizeof(uint16_t);
+    idx += pckSize;
+
+    const unsigned int scnt = ntohs(pck->scnt);
+    if ((scnt <= 8) && (ntohs(pck->samp[0]) == 0) && (ntohs(pck->samp[1]) == 0))
+      continue; // empty data
+    if ((scnt <= 12) &&
+        ((ntohs(pck->samp[0]) == 0x11ff) || (ntohs(pck->samp[1]) == 0x11ff)))
+      continue; // Data starting at 511 bin
+
+    ev_count = GET_EVENT_COUNT(ntohs(pck->ecnt));
+
+    unsigned short fec, asic, channel;
+    const unsigned short arg1 = GET_RB_ARG1(ntohs(pck->args));
+    const unsigned short arg2 = GET_RB_ARG2(ntohs(pck->args));
+
+    int physChannel = Arg12ToFecAsicChannel(arg1, arg2, fec, asic, channel);
+
+    if (physChannel < 0)
+      continue;
+
+    int timeBin = 0;
+    std::vector<short> sData(512, 0);
+
+    for (unsigned int i = 0; i < scnt && timeBin <= 511; i++) {
+      uint16_t val = ntohs(pck->samp[i]);
+      if ((val & 0xFE00) == 0x1000) {
+        timeBin = GET_CELL_INDEX(val);
+      } else if ((val & 0xF000) == 0) {
+        if (timeBin < 512)
+          sData[timeBin] = val;
+        timeBin++;
+      }
+    }
+
+    sEvent.AddSignal(physChannel, sData);
+  }
+}

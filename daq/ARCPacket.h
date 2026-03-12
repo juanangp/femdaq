@@ -13,8 +13,8 @@
   0x4000 // Pedestal Histogram for given Card and Chip
 
 #define PUT_CARD_CHIP_CHAN_HISTO(ca, as, ch)                                   \
-  (PFX_CARD_CHIP_CHAN_HISTO | (((ca)&0x1F) << 9) | (((as)&0x3) << 7) |         \
-   (((ch)&0x7F) << 0))
+  (PFX_CARD_CHIP_CHAN_HISTO | (((ca) & 0x1F) << 9) | (((as) & 0x3) << 7) |     \
+   (((ch) & 0x7F) << 0))
 
 // Prefix Codes for 12-bit data content
 #define PFX_12_BIT_CONTENT_MASK 0xF000 // Mask to select 4 MSB's of prefix
@@ -43,12 +43,12 @@
 #define PFX_CHIP_CHAN_HIT_CNT 0x1200 // Chip (2 bit) Channel hit count (7 bit)
 #define PFX_FRAME_SEQ_NB 0x1000      // Sequence number for UDP frame
 
-#define PUT_HISTO_BIN_IX(bi) (PFX_HISTO_BIN_IX | ((bi)&0x1FF))
+#define PUT_HISTO_BIN_IX(bi) (PFX_HISTO_BIN_IX | ((bi) & 0x1FF))
 #define PUT_PEDTHR_LIST(f, a, m, t)                                            \
-  (PFX_PEDTHR_LIST | (((f)&0x1F) << 4) | (((a)&0x3) << 2) | (((m)&0x1) << 1) | \
-   (((t)&0x1) << 0))
-#define PUT_FRAME_SEQ_NB(nb) (PFX_FRAME_SEQ_NB | ((nb)&0x1FF))
-#define GET_FRAME_SEQ_NB(fr) ((fr)&0x1FF)
+  (PFX_PEDTHR_LIST | (((f) & 0x1F) << 4) | (((a) & 0x3) << 2) |                \
+   (((m) & 0x1) << 1) | (((t) & 0x1) << 0))
+#define PUT_FRAME_SEQ_NB(nb) (PFX_FRAME_SEQ_NB | ((nb) & 0x1FF))
+#define GET_FRAME_SEQ_NB(fr) ((fr) & 0x1FF)
 
 // Prefix Codes for 8-bit data content
 #define PFX_8_BIT_CONTENT_MASK 0xFF00 // Mask to select 8 MSB's of prefix
@@ -104,70 +104,71 @@
 #define PFX_NULL_CONTENT 0x0000 // Null content
 
 #define PUT_EXTD_PEDTHR_LIST(f, a, m, t)                                       \
-  ((((f)&0x1F) << 6) | (((a)&0xF) << 2) | (((m)&0x1) << 1) | (((t)&0x1) << 0))
-#define GET_EXTD_PEDTHR_LIST_FEM(w) (((w)&0x07C0) >> 6)
-#define GET_EXTD_PEDTHR_LIST_ASIC(w) (((w)&0x003C) >> 2)
-#define GET_EXTD_PEDTHR_LIST_MODE(w) (((w)&0x0002) >> 1)
-#define GET_EXTD_PEDTHR_LIST_TYPE(w) (((w)&0x0001) >> 0)
+  ((((f) & 0x1F) << 6) | (((a) & 0xF) << 2) | (((m) & 0x1) << 1) |             \
+   (((t) & 0x1) << 0))
+#define GET_EXTD_PEDTHR_LIST_FEM(w) (((w) & 0x07C0) >> 6)
+#define GET_EXTD_PEDTHR_LIST_ASIC(w) (((w) & 0x003C) >> 2)
+#define GET_EXTD_PEDTHR_LIST_MODE(w) (((w) & 0x0002) >> 1)
+#define GET_EXTD_PEDTHR_LIST_TYPE(w) (((w) & 0x0001) >> 0)
 
 // Macros to extract 14-bit data content
-#define GET_CARD_IX(w) (((w)&0x3E00) >> 9)
-#define GET_CHIP_IX(w) (((w)&0x0180) >> 7)
-#define GET_CHAN_IX(w) (((w)&0x007F) >> 0)
+#define GET_CARD_IX(w) (((w) & 0x3E00) >> 9)
+#define GET_CHIP_IX(w) (((w) & 0x0180) >> 7)
+#define GET_CHAN_IX(w) (((w) & 0x007F) >> 0)
 
 // Macros to extract 12-bit data content
-#define GET_ADC_DATA(w) (((w)&0x0FFF) >> 0)
-#define GET_LAT_HISTO_BIN(w) (((w)&0x0FFF) >> 0)
-#define PUT_LAT_HISTO_BIN(w) (PFX_LAT_HISTO_BIN | (((w)&0x0FFF) >> 0))
+#define GET_ADC_DATA(w) (((w) & 0x0FFF) >> 0)
+#define GET_LAT_HISTO_BIN(w) (((w) & 0x0FFF) >> 0)
+#define PUT_LAT_HISTO_BIN(w) (PFX_LAT_HISTO_BIN | (((w) & 0x0FFF) >> 0))
 
 // Macros to extract 11-bit data content
-#define GET_LAST_CELL_READ(w) (((w)&0x01FF) >> 0)
-#define GET_CHIP_IX_LCR(w) (((w)&0x0600) >> 9)
+#define GET_LAST_CELL_READ(w) (((w) & 0x01FF) >> 0)
+#define GET_CHIP_IX_LCR(w) (((w) & 0x0600) >> 9)
 
 // Macros to extract 9-bit data content
-#define GET_TIME_BIN(w) (((w)&0x01FF) >> 0)
-#define GET_HISTO_BIN(w) (((w)&0x01FF) >> 0)
-#define GET_PEDTHR_LIST_FEM(w) (((w)&0x01F0) >> 4)
-#define GET_PEDTHR_LIST_ASIC(w) (((w)&0x000C) >> 2)
-#define GET_PEDTHR_LIST_MODE(w) (((w)&0x0002) >> 1)
-#define GET_PEDTHR_LIST_TYPE(w) (((w)&0x0001) >> 0)
+#define GET_TIME_BIN(w) (((w) & 0x01FF) >> 0)
+#define GET_HISTO_BIN(w) (((w) & 0x01FF) >> 0)
+#define GET_PEDTHR_LIST_FEM(w) (((w) & 0x01F0) >> 4)
+#define GET_PEDTHR_LIST_ASIC(w) (((w) & 0x000C) >> 2)
+#define GET_PEDTHR_LIST_MODE(w) (((w) & 0x0002) >> 1)
+#define GET_PEDTHR_LIST_TYPE(w) (((w) & 0x0001) >> 0)
 #define PUT_VERSION_ST_SID(w, v, t, i)                                         \
-  (((w)&0xFE00) | (((v)&0x0007) << 6) | (((t)&0x0001) << 5) |                  \
-   (((i)&0x001F) << 0))
-#define GET_VERSION_FRAMING(w) (((w)&0x01C0) >> 6)
-#define GET_SOURCE_TYPE(w) (((w)&0x0020) >> 5)
-#define GET_SOURCE_ID(w) (((w)&0x001F) >> 0)
-#define GET_CHAN_HIT_CNT(w) (((w)&0x007F) >> 0)
-#define GET_CHIP_IX_CHC(w) (((w)&0x0180) >> 7)
+  (((w) & 0xFE00) | (((v) & 0x0007) << 6) | (((t) & 0x0001) << 5) |            \
+   (((i) & 0x001F) << 0))
+#define GET_VERSION_FRAMING(w) (((w) & 0x01C0) >> 6)
+#define GET_SOURCE_TYPE(w) (((w) & 0x0020) >> 5)
+#define GET_SOURCE_ID(w) (((w) & 0x001F) >> 0)
+#define GET_CHAN_HIT_CNT(w) (((w) & 0x007F) >> 0)
+#define GET_CHIP_IX_CHC(w) (((w) & 0x0180) >> 7)
 
 // Macros to act on 8-bit data content
-#define GET_ASCII_LEN(w) (((w)&0x00FF) >> 0)
-#define PUT_ASCII_LEN(w) (PFX_ASCII_MSG_LEN | ((w)&0x00FF))
-#define GET_SOE_EV_TYPE(w) (((w)&0x00C0) >> 6)
-#define GET_SOE_SOURCE_TYPE(w) (((w)&0x0020) >> 5)
-#define GET_SOE_SOURCE_ID(w) (((w)&0x001F) >> 0)
+#define GET_ASCII_LEN(w) (((w) & 0x00FF) >> 0)
+#define PUT_ASCII_LEN(w) (PFX_ASCII_MSG_LEN | ((w) & 0x00FF))
+#define GET_SOE_EV_TYPE(w) (((w) & 0x00C0) >> 6)
+#define GET_SOE_SOURCE_TYPE(w) (((w) & 0x0020) >> 5)
+#define GET_SOE_SOURCE_ID(w) (((w) & 0x001F) >> 0)
 
 // Macros to act on 6-bit data content
-#define GET_EOE_SOURCE_TYPE(w) (((w)&0x0020) >> 5)
-#define GET_EOE_SOURCE_ID(w) (((w)&0x001F) >> 0)
-#define GET_BERT_STAT_SOURCE_TYPE(w) (((w)&0x0020) >> 5)
-#define GET_BERT_STAT_SOURCE_ID(w) (((w)&0x001F) >> 0)
+#define GET_EOE_SOURCE_TYPE(w) (((w) & 0x0020) >> 5)
+#define GET_EOE_SOURCE_ID(w) (((w) & 0x001F) >> 0)
+#define GET_BERT_STAT_SOURCE_TYPE(w) (((w) & 0x0020) >> 5)
+#define GET_BERT_STAT_SOURCE_ID(w) (((w) & 0x001F) >> 0)
 
 // Macros to act on 4-bit data content
-#define GET_EVENT_TYPE(w) (((w)&0x0007) >> 0)
-#define GET_EOE_SIZE(w) (((w)&0x000F) >> 0)
-#define GET_EXTD_CARD_CHIP_LAST_CELL_READ(w) (((w)&0x000F) >> 0)
+#define GET_EVENT_TYPE(w) (((w) & 0x0007) >> 0)
+#define GET_EOE_SIZE(w) (((w) & 0x000F) >> 0)
+#define GET_EXTD_CARD_CHIP_LAST_CELL_READ(w) (((w) & 0x000F) >> 0)
 
 // Macros to extract 2-bit data content
-#define GET_CH_HIT_CNT_HISTO_CHIP_IX(w) (((w)&0x0003) >> 0)
-#define PUT_CH_HIT_CNT_HISTO_CHIP_IX(w) (PFX_CH_HIT_CNT_HISTO | ((w)&0x0003))
+#define GET_CH_HIT_CNT_HISTO_CHIP_IX(w) (((w) & 0x0003) >> 0)
+#define PUT_CH_HIT_CNT_HISTO_CHIP_IX(w) (PFX_CH_HIT_CNT_HISTO | ((w) & 0x0003))
 
 // Macros to work with extended card/chip/channel format
 #define PUT_EXTD_CARD_CHIP_CHAN(ca, as, ch)                                    \
-  ((((ca)&0x1F) << 11) | (((as)&0xF) << 7) | (((ch)&0x7F) << 0))
-#define GET_EXTD_CARD_IX(w) (((w)&0xF800) >> 11)
-#define GET_EXTD_CHIP_IX(w) (((w)&0x0780) >> 7)
-#define GET_EXTD_CHAN_IX(w) (((w)&0x007F) >> 0)
+  ((((ca) & 0x1F) << 11) | (((as) & 0xF) << 7) | (((ch) & 0x7F) << 0))
+#define GET_EXTD_CARD_IX(w) (((w) & 0xF800) >> 11)
+#define GET_EXTD_CHIP_IX(w) (((w) & 0x0780) >> 7)
+#define GET_EXTD_CHAN_IX(w) (((w) & 0x007F) >> 0)
 
 #define CURRENT_FRAMING_VERSION 0
 

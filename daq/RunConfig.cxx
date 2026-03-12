@@ -32,6 +32,7 @@ void RunConfig::loadConfig() {
   maxTime = getOrDefault(run, "time", maxTime);
   maxTimeSeconds = ParseTimeToSeconds(maxTime);
   electronics = getOrDefault(run, "electronics", electronics);
+  updateRateTime = getOrDefault(run, "updateRate", updateRateTime);
 
   if (verbose == "debug")
     verboseLevel = Verbosity::Debug;

@@ -557,10 +557,11 @@ void ConfigPacket_Print(uint16_t *fr, const uint16_t &size, FILE *fp) {
       sz_rd++;
     }
     asciiMsg += "\0";
-    fprintf(fp, "%s\n", asciiMsg.c_str());
+    fprintf(fp, "%s", asciiMsg.c_str());
     fr++;
     sz_rd++;
   } else if (*fr == PFX_LONG_ASCII_MSG) {
+    fprintf(fp, ">>> ");
     fr++;
     sz_rd++;
     r0 = (*fr);
@@ -577,7 +578,7 @@ void ConfigPacket_Print(uint16_t *fr, const uint16_t &size, FILE *fp) {
     if (r0 & 0x1) {
       asciiMsg += (char)(*fr & 0xFF);
     }
-    fprintf(fp, "%s\n", asciiMsg.c_str());
+    fprintf(fp, "%s", asciiMsg.c_str());
     fr++;
     sz_rd++;
   }

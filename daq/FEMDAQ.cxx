@@ -316,9 +316,10 @@ void FEMDAQ::UpdateThread() {
   double rateTime = getCurrentTime();
   double prevRateTime = rateTime;
   int prevEvCount = storedEvents.load();
+  const int updateTime = runConfig.updateRateTime;
 
   while (!abrt && !stopRun) {
-    std::this_thread::sleep_for(std::chrono::seconds(5));
+    std::this_thread::sleep_for(std::chrono::seconds(updateTime));
     double rateTime = getCurrentTime();
     const double elapsed = rateTime - prevRateTime;
     const double runElapsedTime = rateTime - runStartTime;

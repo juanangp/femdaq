@@ -22,6 +22,7 @@ public:
   std::string type = "";
   std::string verbose = "info";
   int nEvents = 0;
+  int updateRateTime = 5; // seconds
   std::string maxTime = "0s";
   std::string maxFileSize = "1Gb";
   std::string electronics = "";

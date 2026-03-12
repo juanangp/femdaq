@@ -399,7 +399,8 @@ void FEMDAQARCFEM::EventBuilder() {
       std::cout << "FEM " << FEM.femID << " Buffer size left "
                 << FEM.buffer.size() << std::endl;
       if (runConfig.verboseLevel >= RunConfig::Verbosity::Debug) {
-        fprintf(FEM.logFile, "------DEBUG BUFFER FRAMES LEFT-------\n");
+        if (FEM.logFile)
+          fprintf(FEM.logFile, "------DEBUG BUFFER FRAMES LEFT-------\n");
         PrintMonitoring(&FEM.buffer[0], FEM.buffer.size(), FEM);
       }
     }

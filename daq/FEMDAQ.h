@@ -46,7 +46,7 @@ public:
   void DumpExecFileToFEMLog(FEMProxy &FEM);
   void CloseLogFiles();
 
-  void OpenFiles(const std::string &flag = "");
+  void OpenFiles(const std::vector<std::string> &flags);
   void CloseFiles();
 
   void CheckFileSize(const double eventTime);
@@ -86,7 +86,7 @@ public:
 
 protected:
   explicit FEMDAQ(RunConfig &rC);
-  RunConfig runConfig;
+  RunConfig &runConfig;
   double runStartTime = 0;
   double runEndTime = 0;
   int fileIndex = 0;

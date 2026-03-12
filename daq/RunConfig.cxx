@@ -32,7 +32,10 @@ void RunConfig::loadConfig() {
   maxTime = getOrDefault(run, "time", maxTime);
   maxTimeSeconds = ParseTimeToSeconds(maxTime);
   electronics = getOrDefault(run, "electronics", electronics);
-  updateRateTime = getOrDefault(run, "updateRate", updateRateTime);
+  updateRate = getOrDefault(run, "updateRate", updateRate);
+  updateRateTime = ParseTimeToSeconds(updateRate);
+  if (updateRateTime <= 0)
+    updateRateTime = 1;
 
   if (verbose == "debug")
     verboseLevel = Verbosity::Debug;
@@ -85,6 +88,21 @@ void RunConfig::loadConfig() {
       std::string value = it->second.as<std::string>();
       addRunInfoField(key, value);
     }
+  }
+}
+
+void RunConfig::SetVerboseLevel(const std::string &vFlag) {
+
+  if (vFlag == "debug") {
+    verboseLevel = Verbosity::Debug;
+  } else if (vFlag == "info") {
+    verboseLevel = Verbosity::Info;
+  } else if (vFlag == "silent") {
+    verboseLevel = Verbosity::Silent;
+  } else {
+    std::cout << "Invalid verbose level " << vFlag << " setting to info"
+              << std::endl;
+    verboseLevel = Verbosity::Info;
   }
 }
 

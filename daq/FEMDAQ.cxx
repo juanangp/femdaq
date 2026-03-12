@@ -159,26 +159,42 @@ void FEMDAQ::WriteRunEndTime(const double endTime) {
   tsObj.Write("endTime", TObject::kOverwrite);
 }
 
-void FEMDAQ::OpenFiles(const std::string &flag) {
+void FEMDAQ::OpenFiles(const std::vector<std::string> &flags) {
 
   MakeBaseFileName();
   fileIndex = 1;
 
   fileNameRoot.clear();
 
-  if (flag.empty() || flag == "all") {
-    OpenRootFile();
-    OpenFileLogs();
-  } else if (flag == "root") {
-    OpenRootFile();
-    CloseLogFiles();
-  } else if (flag == "log") {
-    CloseRootFile();
-    OpenFileLogs();
+  CloseLogFiles();
+  CloseRootFile();
+
+  bool openRootFile = false;
+  bool openLogFile = false;
+
+  if (flags.empty()) {
+    openRootFile = true;
+    openLogFile = true;
   } else {
-    throw std::runtime_error("Invalid fopen flag: " + flag +
-                             "; valid flags are: all, root or log");
+    for (const auto &flag : flags) {
+      if (flag == "all") {
+        openRootFile = true;
+        openLogFile = true;
+      } else if (flag == "root") {
+        openRootFile = true;
+      } else if (flag == "log") {
+        openLogFile = true;
+      } else {
+        throw std::runtime_error("Invalid fopen flag: " + flag +
+                                 "; valid flags are: all, root or log");
+      }
+    }
   }
+
+  if (openRootFile)
+    OpenRootFile();
+  if (openLogFile)
+    OpenFileLogs();
 }
 
 void FEMDAQ::OpenRootFile() {
@@ -326,9 +342,11 @@ void FEMDAQ::UpdateThread() {
     auto tmpstm = GetTimeStampFromUnixTime(rateTime);
     const int evCount = storedEvents.load();
 
-    std::cout << tmpstm << " Total events: " << evCount
-              << " Rate: " << (evCount - prevEvCount) / elapsed << " Hz "
-              << "Run time " << FormatElapsedTime(runElapsedTime) << std::endl;
+    if (runConfig.verboseLevel >= RunConfig::Verbosity::Info)
+      std::cout << tmpstm << " Total events: " << evCount
+                << " Rate: " << (evCount - prevEvCount) / elapsed << " Hz "
+                << "Run time " << FormatElapsedTime(runElapsedTime)
+                << std::endl;
     prevEvCount = evCount;
     prevRateTime = rateTime;
     if (runConfig.nEvents > 0 && evCount >= runConfig.nEvents) {

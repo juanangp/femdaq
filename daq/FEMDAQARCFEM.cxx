@@ -348,10 +348,11 @@ void FEMDAQARCFEM::EventBuilder() {
       sEvent.timestamp = (double)ts * 1.E-8 + runStartTime;
 
       if (storedEvents == 0) {
-        std::cout << "Start time: " << GetTimeStampFromUnixTime(runStartTime)
-                  << " Last ev tS: "
-                  << GetTimeStampFromUnixTime(sEvent.timestamp) << " "
-                  << sEvent.timestamp - runStartTime << std::endl;
+        if (runConfig.verboseLevel >= RunConfig::Verbosity::Info)
+          std::cout << "Start time: " << GetTimeStampFromUnixTime(runStartTime)
+                    << " Last ev tS: "
+                    << GetTimeStampFromUnixTime(sEvent.timestamp) << " "
+                    << sEvent.timestamp - runStartTime << std::endl;
       }
 
       if (fileRoot && !sEvent.signalsID.empty()) {
@@ -385,19 +386,16 @@ void FEMDAQARCFEM::EventBuilder() {
     std::this_thread::sleep_for(std::chrono::milliseconds(2));
   }
 
-  std::cout << "End of event builder " << storedEvents << " events acquired in "
-            << runEndTime - runStartTime << " s"
-            << " Avg rate: " << storedEvents / (runEndTime - runStartTime)
-            << " Hz" << std::endl;
-
-  std::cout << "End time: " << GetTimeStampFromUnixTime(runEndTime)
-            << " Last evtS: " << GetTimeStampFromUnixTime(sEvent.timestamp)
-            << " " << runEndTime - sEvent.timestamp << std::endl;
+  if (runConfig.verboseLevel >= RunConfig::Verbosity::Info)
+    std::cout << "End time: " << GetTimeStampFromUnixTime(runEndTime)
+              << " Last evtS: " << GetTimeStampFromUnixTime(sEvent.timestamp)
+              << " " << runEndTime - sEvent.timestamp << std::endl;
 
   for (auto &FEM : FEMArray)
     if (!FEM.buffer.empty()) {
-      std::cout << "FEM " << FEM.femID << " Buffer size left "
-                << FEM.buffer.size() << std::endl;
+      if (runConfig.verboseLevel >= RunConfig::Verbosity::Info)
+        std::cout << "FEM " << FEM.femID << " Buffer size left "
+                  << FEM.buffer.size() << std::endl;
       if (runConfig.verboseLevel >= RunConfig::Verbosity::Debug) {
         if (FEM.logFile)
           fprintf(FEM.logFile, "------DEBUG BUFFER FRAMES LEFT-------\n");
@@ -411,4 +409,10 @@ void FEMDAQARCFEM::EventBuilder() {
 
     WriteRunEndTime(runEndTime);
   }
+
+  std::cout << "End of event builder " << GetTimeStampFromUnixTime(runEndTime)
+            << " " << storedEvents << " events acquired in "
+            << FormatElapsedTime(runEndTime - runStartTime) << " s"
+            << " Avg rate: " << storedEvents / (runEndTime - runStartTime)
+            << " Hz" << std::endl;
 }

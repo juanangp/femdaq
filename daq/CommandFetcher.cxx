@@ -18,7 +18,8 @@ CommandFetcher::CommandFetcher(RunConfig &rC) : runConfig(rC) {
   // Load history file (create ~/.femdaq_history if it doesn't exist)
   histFile = std::string(getenv("HOME")) + "/.femdaq_history";
   read_history(histFile.c_str());
-  std::cout << "History file " << histFile << std::endl;
+  if (runConfig.verboseLevel >= RunConfig::Verbosity::Info)
+    std::cout << "History file " << histFile << std::endl;
 }
 
 void CommandFetcher::handleCommand(const std::string &line) {
@@ -49,19 +50,14 @@ void CommandFetcher::handleCommand(const std::string &line) {
       daq->UpdateRunConfigInfo();
   } else if (cmd == "fopen") {
     // Open log and root files
-    if (!daq->isReadOnly()) {
-      // Flag options, empty/all --> Logs and root files, log --> only logs,
-      // root --> only root
-      if (!arg.empty())
-        daq->OpenFiles(args[0]);
-      else
-        daq->OpenFiles();
-    }
+    if (!daq->isReadOnly())
+      daq->OpenFiles(args);
+    // Flag options, empty/all --> Logs and root files, log --> only logs,
+    // root --> only root
   } else if (cmd == "fclose") {
     // Close log and root files
-    if (!daq->isReadOnly()) {
+    if (!daq->isReadOnly())
       daq->CloseFiles();
-    }
   } else if (cmd == "startDAQ") {
     // Start acquisiton loop
     daq->startDAQ(args);
@@ -71,6 +67,9 @@ void CommandFetcher::handleCommand(const std::string &line) {
   } else if (cmd == "Pedestals") {
     // Start Pedestal loop (DCC)
     daq->Pedestals(args);
+  } else if (cmd == "verbose" && !args.empty()) {
+    // Setting verbose (override run config)
+    runConfig.SetVerboseLevel(args[0]);
   } else if (cmd == "sleep") {
     int sleepTime = 1;
     auto result = std::from_chars(args[0].data(),
@@ -125,7 +124,8 @@ void CommandFetcher::execFile(const std::string &filename) {
     // if (shutdownRequested()) break;
     if (line.empty() || line[0] == '#')
       continue;
-    std::cout << "> " << line << std::endl;
+    if (runConfig.verboseLevel >= RunConfig::Verbosity::Info)
+      std::cout << "> " << line << std::endl;
     handleCommand(line);
   }
 }

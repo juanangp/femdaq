@@ -22,7 +22,8 @@ public:
   std::string type = "";
   std::string verbose = "info";
   int nEvents = 0;
-  int updateRateTime = 5; // seconds
+  std::string updateRate = "5s";
+  int updateRateTime = 5;
   std::string maxTime = "0s";
   std::string maxFileSize = "1Gb";
   std::string electronics = "";
@@ -65,6 +66,7 @@ public:
   ~RunConfig() = default;
 
   void loadConfig();
+  void SetVerboseLevel(const std::string &vFlag);
   inline void SetFileName(const std::string &fN) { fileName = fN; }
   inline std::string GetFileName() const { return fileName; }
 

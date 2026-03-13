@@ -18,9 +18,7 @@ public:
   PacketAPI packetAPI;
 
   static std::atomic<bool> stopReceiver;
-  static std::atomic<bool> stopEventBuilder;
 
-  std::thread eventBuilderThread;
   std::vector<std::thread> receiverThreads;
 
   explicit FEMDAQARCFEM(RunConfig &rC);

@@ -7,7 +7,6 @@
 #include <future>
 
 std::atomic<bool> FEMDAQARCFEM::stopReceiver(false);
-std::atomic<bool> FEMDAQARCFEM::stopEventBuilder(false);
 
 FEMDAQARCFEM::Registrar::Registrar() {
   FEMDAQ::RegisterType("ARC", [](RunConfig &cfg) {
@@ -400,7 +399,7 @@ void FEMDAQARCFEM::EventBuilder() {
 
   std::cout << "End of event builder " << GetTimeStampFromUnixTime(runEndTime)
             << " " << storedEvents << " events acquired in "
-            << FormatElapsedTime(runEndTime - runStartTime) << " s"
+            << FormatElapsedTime(runEndTime - runStartTime)
             << " Avg rate: " << storedEvents / (runEndTime - runStartTime)
             << " Hz" << std::endl;
 }

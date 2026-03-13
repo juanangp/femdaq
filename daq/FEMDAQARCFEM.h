@@ -27,7 +27,6 @@ public:
   ~FEMDAQARCFEM();
 
   virtual void startDAQ(const std::vector<std::string> &flags) override;
-  virtual void stopDAQ() override;
   virtual void SendCommand(const char *cmd) override;
 
   void FEMReceiverThread(FEMProxy &FEM);

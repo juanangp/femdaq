@@ -11,6 +11,7 @@
 
 std::atomic<bool> FEMDAQ::abrt(false);
 std::atomic<bool> FEMDAQ::stopRun(false);
+std::atomic<bool> FEMDAQ::stopEventBuilder(false);
 
 FEMDAQ::FEMDAQ(RunConfig &rC) : runConfig(rC) {
 
@@ -327,6 +328,20 @@ void FEMDAQ::FillTree(const double eventTime, double &lastTimeSaved) {
   }
 }
 
+void FEMDAQ::stopDAQ() {
+
+  runEndTime = getCurrentTime();
+
+  cv.notify_all();
+
+  if (UpdateRunThread.joinable())
+    UpdateRunThread.join();
+
+  stopEventBuilder = true;
+  if (eventBuilderThread.joinable())
+    eventBuilderThread.join();
+}
+
 void FEMDAQ::UpdateThread() {
 
   double rateTime = getCurrentTime();
@@ -335,14 +350,18 @@ void FEMDAQ::UpdateThread() {
   const int updateTime = runConfig.updateRateTime;
 
   while (!abrt && !stopRun) {
-    std::this_thread::sleep_for(std::chrono::seconds(updateTime));
+    std::unique_lock<std::mutex> lk(cv_m);
+    cv.wait_for(lk, std::chrono::seconds(updateTime),
+                [this] { return abrt || stopRun; });
+
     double rateTime = getCurrentTime();
     const double elapsed = rateTime - prevRateTime;
     const double runElapsedTime = rateTime - runStartTime;
     auto tmpstm = GetTimeStampFromUnixTime(rateTime);
     const int evCount = storedEvents.load();
 
-    if (runConfig.verboseLevel >= RunConfig::Verbosity::Info)
+    if (runConfig.verboseLevel >= RunConfig::Verbosity::Info &&
+        (!abrt && !stopRun))
       std::cout << tmpstm << " Total events: " << evCount
                 << " Rate: " << (evCount - prevEvCount) / elapsed << " Hz "
                 << "Run time " << FormatElapsedTime(runElapsedTime)

@@ -6,15 +6,10 @@
 class FEMDAQDCC : public FEMDAQ {
 
 public:
-  static std::atomic<bool> stopEventBuilder;
-
-  std::thread eventBuilderThread;
-
   explicit FEMDAQDCC(RunConfig &rC);
   ~FEMDAQDCC();
 
   virtual void startDAQ(const std::vector<std::string> &flags) override;
-  virtual void stopDAQ() override;
   virtual void SendCommand(const char *cmd) override;
   virtual void Pedestals(const std::vector<std::string> &flags) override;
 

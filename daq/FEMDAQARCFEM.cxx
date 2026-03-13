@@ -231,18 +231,6 @@ void FEMDAQARCFEM::startDAQ(const std::vector<std::string> &flags) {
   }
 }
 
-void FEMDAQARCFEM::stopDAQ() {
-
-  runEndTime = getCurrentTime();
-
-  if (UpdateRunThread.joinable())
-    UpdateRunThread.join();
-
-  stopEventBuilder = true;
-  if (eventBuilderThread.joinable())
-    eventBuilderThread.join();
-}
-
 void FEMDAQARCFEM::PrintMonitoring(uint16_t *buff, const uint16_t &size,
                                    FEMProxy &FEM) {
   char *ptr = nullptr;

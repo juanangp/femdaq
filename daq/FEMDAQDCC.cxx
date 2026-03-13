@@ -4,8 +4,6 @@
 #include <filesystem>
 #include <sstream>
 
-std::atomic<bool> FEMDAQDCC::stopEventBuilder(false);
-
 FEMDAQDCC::Registrar::Registrar() {
   FEMDAQ::RegisterType(
       "DCC", [](RunConfig &cfg) { return std::make_unique<FEMDAQDCC>(cfg); });
@@ -103,12 +101,18 @@ void FEMDAQDCC::startDAQ(const std::vector<std::string> &flags) {
   eventBuilderThread = std::thread(&FEMDAQDCC::EventBuilder, this);
   UpdateRunThread = std::thread(&FEMDAQ::UpdateThread, this);
 
-  auto rS = std::chrono::high_resolution_clock::now();
-
   auto &FEM = FEMArray.front();
   FEM.tmpBuffer.clear();
   const auto &fecs = runConfig.fems.front().fecs;
   char cmd[200];
+
+  std::cout << GetTimeStampFromUnixTime(runStartTime)
+            << " Starting data taking ";
+  if (fileRoot)
+    std::cout << fileNameRoot;
+  std::cout << std::endl;
+
+  auto rS = std::chrono::high_resolution_clock::now();
 
   while (!stopRun) {
     // SendCommand("fem 0");
@@ -226,8 +230,10 @@ void FEMDAQDCC::EventBuilder() {
     std::this_thread::sleep_for(std::chrono::milliseconds(2));
   }
 
-  std::cout << "End of event builder: " << storedEvents << " events stored and "
-            << ev_count << " events triggered" << std::endl;
+  std::cout << GetTimeStampFromUnixTime(runStartTime)
+            << " End of event builder: " << storedEvents
+            << " events stored and " << ev_count << " events triggered"
+            << std::endl;
 
   if (!FEM.buffer.empty()) {
     std::cout << "FEM " << FEM.femID << " Buffer size left "
@@ -245,16 +251,6 @@ void FEMDAQDCC::EventBuilder() {
   if (fileRoot) {
     WriteRunEndTime(runEndTime);
   }
-}
-
-void FEMDAQDCC::stopDAQ() {
-
-  if (UpdateRunThread.joinable())
-    UpdateRunThread.join();
-
-  stopEventBuilder = true;
-  if (eventBuilderThread.joinable())
-    eventBuilderThread.join();
 }
 
 void FEMDAQDCC::SendCommand(const char *cmd) {

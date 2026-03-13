@@ -26,7 +26,7 @@ public:
   void setActiveFEM(const std::string &FEMID);
 
   virtual void startDAQ(const std::vector<std::string> &flags) = 0;
-  virtual void stopDAQ() = 0;
+  void stopDAQ();
   virtual void SendCommand(const char *cmd) = 0;
   virtual void Pedestals(const std::vector<std::string> &flags) {
     std::cout << "Not implemented in this electronics" << std::endl;
@@ -34,6 +34,7 @@ public:
 
   static std::atomic<bool> abrt;
   static std::atomic<bool> stopRun;
+  static std::atomic<bool> stopEventBuilder;
   std::atomic<uint32_t> storedEvents{0};
 
   std::unique_ptr<TFile> fileRoot = nullptr;
@@ -70,6 +71,7 @@ public:
   void MakeFileNameLog();
 
   std::thread UpdateRunThread;
+  std::thread eventBuilderThread;
 
   using FactoryFunc = std::function<std::unique_ptr<FEMDAQ>(RunConfig &)>;
 
@@ -94,6 +96,9 @@ protected:
   std::string fileNameRoot = "";
   std::string execFile = "";
   SignalEvent sEvent;
+
+  std::condition_variable cv;
+  std::mutex cv_m;
 
   static bool RegisterType(const std::string &electronics, FactoryFunc func) {
     GetRegistry()[electronics] = func;

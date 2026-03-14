@@ -114,8 +114,6 @@ A macro using ROOT GUI is provided for event visualization. To run the EventDisp
 
 Note that it uses `FEMDaqRoot` which starts a ROOT application with pre-loaded femdaq macros. A GUI will prompt:
 
-
-
-
+![image](https://github.com/user-attachments/assets/36634fbc-d033-4975-b039-5a9b472c4c59)
 
 

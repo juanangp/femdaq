@@ -19,7 +19,7 @@ jobs:
         with:
           environment-name: root-env
           create-args: >-
-            root=6.30
+            root=6.28
             cmake
             gcc_linux-64
             gxx_linux-64

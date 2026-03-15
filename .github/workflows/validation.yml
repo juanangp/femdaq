@@ -34,6 +34,7 @@ jobs:
           cmake --build build
           cmake --install build
           export FEMDAQ_PATH="${{ github.workspace }}/install"
+          export FEMDAQ_INCLUDE_PATH="$FEMDAQ_PATH/inc"
           export PATH="$FEMDAQ_PATH/bin:$PATH"
           export LD_LIBRARY_PATH="$FEMDAQ_PATH/lib:$LD_LIBRARY_PATH"
           FEMDaqRoot -b -q

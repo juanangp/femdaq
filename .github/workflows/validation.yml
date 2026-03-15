@@ -14,27 +14,24 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install Dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            cmake g++ libreadline-dev libyaml-cpp-dev \
-            dpkg-dev binutils libx11-dev libxpm-dev \
-            libxft-dev libxext-dev python3 libssl-dev
-
-      - name: Setup ROOT CERN
-        uses: root-project/setup-root@v1
+      - name: Setup Mamba (Conda)
+        uses: mamba-org/setup-micromamba@v1
         with:
-          version: '6.30.04'
+          environment-name: root-env
+          create-args: >-
+            root
+            cmake
+            gcc_linux-64
+            gxx_linux-64
+            libreadline
+            yaml-cpp
+          cache-environment: true
 
       - name: Build and install
+        shell: micromamba-shell {0} # Esto activa el entorno automáticamente
         run: |
-          # Usamos una ruta con permisos de escritura
-          export INSTALL_PATH=${{ github.workspace }}/install
-          cmake -S . -B build -DCMAKE_INSTALL_PREFIX=$INSTALL_PATH
+          cmake -S . -B build -DCMAKE_INSTALL_PREFIX=${{ github.workspace }}/install
           cmake --build build
           cmake --install build
-
-          # Verificación final
-          source $INSTALL_PATH/thisFEMDAQ.sh
-          # FEMDAQRoot -b -q # Descomenta cuando confirmes que el binario existe
+          source ${{ github.workspace }}/install/thisFEMDAQ.sh
+          FEMDAQRoot -b -q

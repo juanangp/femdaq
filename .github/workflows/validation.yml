@@ -21,7 +21,7 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -69,5 +69,5 @@ jobs:
           FEMDAQRoot -b -q
           cmake ..
           make -j2
-          
+
       - name: Run Tests

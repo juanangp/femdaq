@@ -41,4 +41,4 @@ jobs:
           femclient -c config/template.cfg <<EOF
           quit
           EOF
-          FEMDaqRoot -l -q -e "EventDisplay()"
+          FEMDaqRoot -l -q

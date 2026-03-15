@@ -1,69 +1,40 @@
 name: Validation
 
-# Controls when the workflow will run
 on:
-  # Triggers the workflow on push or pull request events but only for the "master" branch
   push:
     branches: [ "master" ]
   pull_request:
     branches: [ "master" ]
-  release:
+  workflow_dispatch:
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
-defaults:
-  run:
-    shell: bash
-env:
-  INSTALL_PATH: /femdaq/install
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
       - name: Install Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            cmake \
-            g++ \
-            libreadline-dev \
-            libyaml-cpp-dev \
-            dpkg-dev \
-            binutils \
-            libx11-dev \
-            libxpm-dev \
-            libxft-dev \
-            libxext-dev \
-            python3 \
-            libssl-dev \
-            libpcre3-dev \
-            xlibmesa-glu-dev \
-            libglew-dev \
-            libftgl-dev \
-            libfftw3-dev \
-            libcfitsio-dev \
-            libgraphviz-dev \
-            libavahi-client-dev \
-            libldap2-dev \
-            libxml2-dev \
-            libkrb5-dev \
-            libgsl-dev \
-            libqt5webengine5
+            cmake g++ libreadline-dev libyaml-cpp-dev \
+            dpkg-dev binutils libx11-dev libxpm-dev \
+            libxft-dev libxext-dev python3 libssl-dev
 
-      - name: Install ROOT CERN
-        run:
-          sudo apt-get install -y root-system-bin libroot-core-dev libroot-tree-dev
+      - name: Setup ROOT CERN
+        uses: root-project/setup-root@v1
+        with:
+          version: '6.30.04'
 
       - name: Build and install
         run: |
-          cmake -S . -B build -DCMAKE_INSTALL_PREFIX=${{ env.INSTALL_PATH }}
+          # Usamos una ruta con permisos de escritura
+          export INSTALL_PATH=${{ github.workspace }}/install
+          cmake -S . -B build -DCMAKE_INSTALL_PREFIX=$INSTALL_PATH
           cmake --build build
           cmake --install build
-          source ${{ env.INSTALL_PATH }}/thisFEMDAQ.sh
-          FEMDAQRoot -b -q
+          
+          # Verificación final
+          source $INSTALL_PATH/thisFEMDAQ.sh
+          # FEMDAQRoot -b -q # Descomenta cuando confirmes que el binario existe

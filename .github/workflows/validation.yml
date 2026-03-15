@@ -67,7 +67,3 @@ jobs:
           cmake --install build
           source ${{ env.INSTALL_PATH }}/thisFEMDAQ.sh
           FEMDAQRoot -b -q
-          cmake ..
-          make -j2
-
-      - name: Run Tests

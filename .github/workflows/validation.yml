@@ -1,0 +1,44 @@
+name: Validation
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Mamba (Conda)
+        uses: mamba-org/setup-micromamba@v1
+        with:
+          environment-name: root-env
+          create-args: >-
+            root=6.28
+            cmake
+            gcc_linux-64
+            gxx_linux-64
+            readline
+            yaml-cpp
+          cache-environment: true
+
+      - name: Build and install
+        shell: micromamba-shell {0} # Esto activa el entorno automáticamente
+        run: |
+          cmake -S . -B build -DCMAKE_INSTALL_PREFIX=${{ github.workspace }}/install
+          cmake --build build
+          cmake --install build
+          export FEMDAQ_PATH="${{ github.workspace }}/install"
+          export FEMDAQ_INCLUDE_PATH="$FEMDAQ_PATH/inc"
+          export PATH="$FEMDAQ_PATH/bin:$PATH"
+          export LD_LIBRARY_PATH="$FEMDAQ_PATH/lib:$LD_LIBRARY_PATH"
+          run: |
+          femclient -c config/template.cfg <<EOF
+          quit
+          EOF
+          FEMDaqRoot -l -q

@@ -33,5 +33,6 @@ jobs:
           cmake -S . -B build -DCMAKE_INSTALL_PREFIX=${{ github.workspace }}/install
           cmake --build build
           cmake --install build
-          source ${{ github.workspace }}/install/thisFEMDAQ.sh
-          FEMDAQRoot -b -q
+          export PATH="${{ github.workspace }}/install/bin:$PATH"
+          export LD_LIBRARY_PATH="${{ github.workspace }}/install/lib:$LD_LIBRARY_PATH"
+          FEMDaqRoot -b -q

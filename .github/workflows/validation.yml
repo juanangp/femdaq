@@ -34,7 +34,7 @@ jobs:
           cmake -S . -B build -DCMAKE_INSTALL_PREFIX=$INSTALL_PATH
           cmake --build build
           cmake --install build
-          
+
           # Verificación final
           source $INSTALL_PATH/thisFEMDAQ.sh
           # FEMDAQRoot -b -q # Descomenta cuando confirmes que el binario existe

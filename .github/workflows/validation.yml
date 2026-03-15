@@ -23,7 +23,7 @@ jobs:
             cmake
             gcc_linux-64
             gxx_linux-64
-            libreadline
+            readline
             yaml-cpp
           cache-environment: true
 

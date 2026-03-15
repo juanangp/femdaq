@@ -38,7 +38,7 @@ jobs:
           export PATH="$FEMDAQ_PATH/bin:$PATH"
           export LD_LIBRARY_PATH="$FEMDAQ_PATH/lib:$LD_LIBRARY_PATH"
           run: |
-          femclient -c config/template.xml <<EOF
+          femclient -c config/template.cfg <<EOF
           quit
           EOF
           FEMDaqRoot -l -q -e "EventDisplay()"

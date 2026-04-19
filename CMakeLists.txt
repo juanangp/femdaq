@@ -22,6 +22,23 @@ FetchContent_Declare(
   GIT_TAG v2.4.2)
 FetchContent_MakeAvailable(CLI11)
 
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
+set(THIRDPARTY_FORCE_PIC
+    ON
+    CACHE BOOL "" FORCE)
+
+set(ENABLE_TESTING
+    OFF
+    CACHE BOOL "" FORCE)
+
+FetchContent_Declare(
+  Prometheus
+  GIT_REPOSITORY https://github.com/jupp0r/prometheus-cpp.git
+  GIT_TAG v1.2.4)
+
+FetchContent_MakeAvailable(Prometheus)
+
 file(
   GLOB_RECURSE
   SOURCE_FILES
@@ -33,14 +50,21 @@ file(
   daq/FEMDAQDCC.cxx
   daq/DCCPacket.cxx
   daq/FEMINOSPacket.cxx
-  daq/ARCPacket.cxx)
+  daq/ARCPacket.cxx
+  daq/PrometheusManager.cxx)
 
 add_library(${PROJECT_NAME} SHARED ${SOURCE_FILES})
 
 target_include_directories(${PROJECT_NAME} PUBLIC ${ROOT_INCLUDE_DIRS} daq)
 
-target_link_libraries(${PROJECT_NAME} CLI11::CLI11 yaml-cpp readline
-                      ${ROOT_LIBRARIES})
+target_link_libraries(
+  ${PROJECT_NAME}
+  CLI11::CLI11
+  yaml-cpp
+  readline
+  prometheus-cpp::core
+  prometheus-cpp::pull
+  ${ROOT_LIBRARIES})
 
 install(TARGETS ${PROJECT_NAME} DESTINATION lib)
 
@@ -51,6 +75,8 @@ target_link_libraries(
   LINK_PUBLIC
   ${PROJECT_NAME}
   CLI11::CLI11
+  prometheus-cpp::core
+  prometheus-cpp::pull
   yaml-cpp
   readline
   ${ROOT_LIBRARIES})
@@ -58,14 +84,7 @@ target_link_libraries(
 install(TARGETS femclient DESTINATION bin)
 
 add_executable(FEMDaqRoot femdaqROOT.cxx)
-target_link_libraries(
-  FEMDaqRoot
-  LINK_PUBLIC
-  ${PROJECT_NAME}
-  CLI11::CLI11
-  yaml-cpp
-  readline
-  ${ROOT_LIBRARIES})
+target_link_libraries(FEMDaqRoot LINK_PUBLIC ${PROJECT_NAME} ${ROOT_LIBRARIES})
 
 install(TARGETS FEMDaqRoot DESTINATION bin)
 

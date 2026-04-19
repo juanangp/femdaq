@@ -9,6 +9,7 @@
 #include <TTree.h>
 
 #include "FEMProxy.h"
+#include "PrometheusManager.h"
 #include "RunConfig.h"
 #include "SignalEvent.h"
 
@@ -96,6 +97,8 @@ protected:
   std::string fileNameRoot = "";
   std::string execFile = "";
   SignalEvent sEvent;
+
+  PrometheusManager prometheus;
 
   std::condition_variable cv;
   std::mutex cv_m;

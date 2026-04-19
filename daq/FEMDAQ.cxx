@@ -56,6 +56,8 @@ void FEMDAQ::MakeBaseFileName() {
 
   fs::path full = fs::path(directory) / base;
   baseFileName = full.string();
+
+  prometheus.setRunNumber(nextRun);
 }
 
 double FEMDAQ::getCurrentTime() {
@@ -226,6 +228,9 @@ void FEMDAQ::OpenRootFile() {
   fnameObj.Write("yaml_fileName", TObject::kOverwrite);
 
   fileIndex++;
+
+  prometheus.setRunName(fileNameRoot);
+  prometheus.setMetadata(yamlDump);
 }
 
 void FEMDAQ::OpenFileLogs() {
@@ -245,12 +250,13 @@ void FEMDAQ::DumpExecFileToFEMLog(FEMProxy &FEM) {
 
   if (!FEM.logFile)
     return;
+
   if (execFile.empty())
     return;
 
   std::ifstream src(execFile);
   if (!src.is_open()) {
-    std::cerr << "Error: Could not open text file: " << execFile << std::endl;
+    std::cout << "Error: Cannot not open file: " << execFile << std::endl;
     return;
   }
 
@@ -276,8 +282,6 @@ void FEMDAQ::CloseLogFiles() {
       FEM.logFile = nullptr;
     }
   }
-
-  execFile.clear();
 }
 
 void FEMDAQ::CloseFiles() {
@@ -359,11 +363,15 @@ void FEMDAQ::UpdateThread() {
     const double runElapsedTime = rateTime - runStartTime;
     auto tmpstm = GetTimeStampFromUnixTime(rateTime);
     const int evCount = storedEvents.load();
+    const double rate = (evCount - prevEvCount) / elapsed;
+
+    prometheus.setEvents(evCount);
+    prometheus.setRate(rate);
 
     if (runConfig.verboseLevel >= RunConfig::Verbosity::Info &&
         (!abrt && !stopRun))
-      std::cout << tmpstm << " Total events: " << evCount
-                << " Rate: " << (evCount - prevEvCount) / elapsed << " Hz "
+      std::cout << tmpstm << " Total events: " << evCount << " Rate: " << rate
+                << " Hz "
                 << "Run time " << FormatElapsedTime(runElapsedTime)
                 << std::endl;
     prevEvCount = evCount;

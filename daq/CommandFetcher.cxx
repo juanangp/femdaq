@@ -87,7 +87,7 @@ void CommandFetcher::handleCommand(const std::string &line) {
 
 void CommandFetcher::runInteractive() {
   char *input;
-  std::cout << "?? Interactive CLI ready. Type 'exit' to quit.\n";
+  std::cout << "?? Interactive CLI ready. Type 'quit' to exit.\n";
 
   while (!shutdownRequested()) {
     input = readline("> ");
@@ -128,6 +128,7 @@ void CommandFetcher::execFile(const std::string &filename) {
       std::cout << "> " << line << std::endl;
     handleCommand(line);
   }
+  daq->SetExecFile("");
 }
 
 void CommandFetcher::requestInterrupt() {

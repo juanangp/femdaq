@@ -45,7 +45,7 @@ private:
 
   TChain *fChain = nullptr;
   TTreeReader *fReader = nullptr;
-  std::map<int, int> fDecodingMap;
+  std::map<int, std::pair<std::string, double>> fDecodingMap;
   TTimer *fTimer;
   TTimer *fWatchdogTimer;
 
@@ -385,8 +385,20 @@ public:
     fDecodingMap = readDecoding(path);
     if (!fDecodingMap.empty()) {
       fLastDecoFile = path;
-      fNChannels = fDecodingMap.size() / 2;
-      fHitMap->SetBins(fNChannels, 0, fNChannels, fNChannels, 0, fNChannels);
+      std::set<double> x_set, y_set;
+
+      for (const auto &[ch, info] : fDecodingMap) {
+        if (info.first == "X")
+          x_set.insert(info.second);
+        else if (info.first == "Y")
+          y_set.insert(info.second);
+      }
+
+      double minX = *x_set.begin(), maxX = *x_set.rbegin();
+      double minY = *y_set.begin(), maxY = *y_set.rbegin();
+
+      fHitMap->SetBins(x_set.size(), minX, maxX, y_set.size(), minY, maxY);
+
       fDecoPathEntry->SetText(gSystem->BaseName(path));
       fDecoPathEntry->SetToolTipText(path);
     }
@@ -481,16 +493,17 @@ public:
         GetParamsFromPulse(pulse, amp, area, maxP);
         if (area > 0 && amp > 0) {
           totAmp += amp;
-          auto it = fDecodingMap.find(sID);
-          if (it != fDecodingMap.end()) {
-            int pos = it->second;
-            int ch = pos % fNChannels;
-            if (pos / fNChannels == 0) {
-              posX += amp * ch;
-              ampX += amp;
-            } else {
-              posY += amp * ch;
-              ampY += amp;
+          if (!fDecodingMap.empty()) {
+            auto it = fDecodingMap.find(sID);
+            if (it != fDecodingMap.end()) {
+              const auto &[axis, pos] = it->second;
+              if (axis == "X") {
+                posX += amp * pos;
+                ampX += amp;
+              } else if (axis == "Y") {
+                posY += amp * pos;
+                ampY += amp;
+              }
             }
           }
         }
@@ -506,10 +519,15 @@ public:
           fStacks->Add(h);
         }
       }
+
+      if (!fDecodingMap.empty()) {
+        if (ampX > 0 && ampY > 0) {
+          fHitMap->Fill(posX / ampX, posY / ampY);
+        }
+      }
+
       if (totAmp)
         fSpectra->Fill(totAmp);
-      if (ampX > 0 && ampY > 0)
-        fHitMap->Fill(posX / ampX, posY / ampY);
 
       fEntry++;
     }
@@ -678,14 +696,18 @@ public:
       delete sa;
   }
 
-  std::map<int, int> readDecoding(std::string f) {
-    std::map<int, int> m;
-    std::ifstream i(f);
-    int s, p;
-    while (i >> s >> p)
-      m[s] = p;
-    return m;
+  std::map<int, std::pair<std::string, double>>
+  readDecoding(const std::string &filedec) {
+    std::map<int, std::pair<std::string, double>> dec;
+    std::ifstream fdec(filedec);
+    int ch;
+    std::string axis;
+    double pos;
+    while (fdec >> ch >> axis >> pos)
+      dec[ch] = std::make_pair(axis, pos);
+    return dec;
   }
+
   virtual ~DAQGUI() {
     ClearEvent();
     if (fReader)

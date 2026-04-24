@@ -76,18 +76,21 @@ private:
   double fSThr = 7.0;
   int fSSz = 100;
 
-  TH1F *fSpectra = nullptr;
-  TH2F *fHitMap = nullptr;
+  int fNReadouts = 1;
+
+  std::map<int, TH1F *> fSpectraMap;
+  std::map<int, TH2F *> fHitMapMap;
+  std::map<int, THStack *> fStacksMap;
   TGraph *fRateGraph;
-  THStack *fStacks = nullptr;
   std::vector<TH1S *> fHistos;
 
 public:
   DAQGUI() : TGMainFrame(gClient->GetRoot(), 1200, 900) {
 
-    fSpectra = new TH1F("Spectra", "Total Amplitude;Amplitude;Counts", 2048, 0,
-                        100000);
-    fHitMap = new TH2F("HitMap", "HitMap;X;Y", 1, 0, 1, 1, 0, 1);
+    fSpectraMap[1] =
+        new TH1F("Spectra1", "Total Amplitude (Sys 1);Amplitude;Counts", 2048,
+                 0, 100000);
+    fHitMapMap[1] = new TH2F("HitMap1", "HitMap (Sys 1);X;Y", 1, 0, 1, 1, 0, 1);
     fRateGraph = new TGraph();
     fRateGraph->SetTitle("Rate;Time [s];Rate [Hz]");
     fRateGraph->SetMarkerStyle(20);
@@ -178,6 +181,10 @@ public:
     TGTextButton *btnDeco = new TGTextButton(leftFrame, "&Load Decoding");
     btnDeco->Connect("Clicked()", "DAQGUI", this, "OpenDecoding()");
     leftFrame->AddFrame(btnDeco, btnL);
+
+    TGTextButton *btnReload = new TGTextButton(leftFrame, "&Reload Run");
+    btnReload->Connect("Clicked()", "DAQGUI", this, "ReloadRun()");
+    leftFrame->AddFrame(btnReload, btnL);
 
     TGTextButton *btnReset = new TGTextButton(leftFrame, "&Reset Histos");
     btnReset->Connect("Clicked()", "DAQGUI", this, "ManualReset()");
@@ -385,23 +392,105 @@ public:
     fDecodingMap = readDecoding(path);
     if (!fDecodingMap.empty()) {
       fLastDecoFile = path;
-      std::set<double> x_set, y_set;
+
+      for (auto const &[id, hitmap] : fHitMapMap)
+        if (hitmap)
+          delete hitmap;
+      fHitMapMap.clear();
+
+      for (auto const &[id, spectra] : fSpectraMap)
+        if (spectra)
+          delete spectra;
+      fSpectraMap.clear();
+
+      for (auto const &[id, stack] : fStacksMap)
+        if (stack)
+          delete stack;
+      fStacksMap.clear();
+
+      std::map<int, std::map<char, std::set<double>>> systemCoords;
 
       for (const auto &[ch, info] : fDecodingMap) {
-        if (info.first == "X")
-          x_set.insert(info.second);
-        else if (info.first == "Y")
-          y_set.insert(info.second);
+        int sysID = 1;
+        if (info.first.size() > 1)
+          sysID = std::stoi(info.first.substr(1));
+        char axis = info.first[0]; // 'X' or 'Y'
+        systemCoords[sysID][axis].insert(info.second);
       }
 
-      double minX = *x_set.begin(), maxX = *x_set.rbegin();
-      double minY = *y_set.begin(), maxY = *y_set.rbegin();
+      for (auto const &[sysID, axes] : systemCoords) {
+        if (axes.count('X') == 0 || axes.count('Y') == 0)
+          continue;
 
-      fHitMap->SetBins(x_set.size(), minX, maxX, y_set.size(), minY, maxY);
+        const auto &x_set = axes.at('X');
+        const auto &y_set = axes.at('Y');
+
+        double minX = *x_set.begin(), maxX = *x_set.rbegin();
+        double minY = *y_set.begin(), maxY = *y_set.rbegin();
+
+        if (fHitMapMap.count(sysID)) {
+          fHitMapMap[sysID]->SetBins(x_set.size(), minX, maxX, y_set.size(),
+                                     minY, maxY);
+        } else {
+          fHitMapMap[sysID] =
+              new TH2F(Form("hHit%d", sysID), Form("HitMap %d;X;Y", sysID),
+                       x_set.size(), minX, maxX, y_set.size(), minY, maxY);
+          fSpectraMap[sysID] =
+              new TH1F(Form("hSpec%d", sysID), Form("Spectra %d", sysID), 2048,
+                       0, fSpecMaxEntry->GetNumber());
+        }
+      }
+
+      fNReadouts = fHitMapMap.size();
 
       fDecoPathEntry->SetText(gSystem->BaseName(path));
       fDecoPathEntry->SetToolTipText(path);
+      UpdateCanvasLayout();
     }
+  }
+
+  void UpdateCanvasLayout() {
+    TCanvas *c = fMainCanvas->GetCanvas();
+    c->Clear();
+    c->Divide(fNReadouts + 1, 2);
+    DrawCanvas();
+  }
+
+  void DrawCanvas() {
+
+    TCanvas *c = fMainCanvas->GetCanvas();
+
+    int nCols = fNReadouts + 1;
+    c->cd(1);
+    bool first = true;
+    int colorIdx = 1;
+    for (auto const &[id, h] : fSpectraMap) {
+      h->SetLineColor(colorIdx++);
+      h->Draw(first ? "" : "same");
+      first = false;
+    }
+    if (fSpectraMap.size() > 1)
+      gPad->BuildLegend(0.7, 0.7, 0.9, 0.9);
+
+    c->cd(nCols + 1);
+    if (fRateGraph->GetN() > 0)
+      fRateGraph->Draw("ALP");
+
+    int col = 2;
+    for (auto const &[id, h] : fHitMapMap) {
+      c->cd(col);
+      h->Draw("COLZ");
+
+      c->cd(col + nCols);
+      if (fStacksMap.count(id) && fStacksMap[id]) {
+        fStacksMap[id]->Draw("nostack,l");
+      }
+
+      col++;
+    }
+
+    c->Modified();
+    c->Update();
   }
 
   void NextEvent() {
@@ -482,8 +571,11 @@ public:
       }
 
       // ... [Rest of the analysis logic: Pulse loop, Spectra fill, HitMap fill]
-      // ...
-      double totAmp = 0, ampX = 0, ampY = 0, posX = 0, posY = 0;
+      struct ReadoutSystem {
+        double ampX = 0, ampY = 0, posX = 0, posY = 0, totAmp = 0;
+      };
+      std::map<int, ReadoutSystem> eventSystems;
+
       for (size_t s = 0; s < fSignalsID->size(); s++) {
         int sID = fSignalsID->at(s);
         std::vector<short> pulse(fPulses->begin() + s * 512,
@@ -491,84 +583,100 @@ public:
         double amp, area;
         int maxP;
         GetParamsFromPulse(pulse, amp, area, maxP);
-        if (area > 0 && amp > 0) {
-          totAmp += amp;
-          if (!fDecodingMap.empty()) {
-            auto it = fDecodingMap.find(sID);
-            if (it != fDecodingMap.end()) {
-              const auto &[axis, pos] = it->second;
-              if (axis == "X") {
-                posX += amp * pos;
-                ampX += amp;
-              } else if (axis == "Y") {
-                posY += amp * pos;
-                ampY += amp;
-              }
-            }
+
+        int sysID = 1; // Por defecto todo al sistema 1
+        double pos = -1.0;
+        char axis = 'N'; // 'N' de None/No definido
+
+        // Intentamos obtener datos del decoding si existe
+        if (!fDecodingMap.empty()) {
+          auto it = fDecodingMap.find(sID);
+          if (it != fDecodingMap.end()) {
+            const std::string &label = it->second.first;
+            sysID = (label.size() == 1) ? 1 : std::stoi(label.substr(1));
+            axis = label[0];
+            pos = it->second.second;
           }
         }
 
         if (shouldDraw) {
-          if (!fStacks)
-            fStacks = new THStack("Pulses", Form("Event %d", fEventID));
+          if (!fStacksMap[sysID])
+            fStacksMap[sysID] =
+                new THStack(Form("hs%d", sysID), Form("Event %d", fEventID));
+
           TH1S *h = new TH1S(Form("h_s%d", sID), "", 512, 0, 512);
           for (int p = 0; p < 512; p++)
             h->SetBinContent(p + 1, pulse[p]);
           h->SetLineColor((sID % 72) + 1);
           fHistos.push_back(h);
-          fStacks->Add(h);
+          fStacksMap[sysID]->Add(h);
+        }
+
+        if (area > 0 && amp > 0) {
+          auto &sys = eventSystems[sysID];
+          sys.totAmp += amp;
+
+          if (axis == 'X') {
+            sys.posX += amp * pos;
+            sys.ampX += amp;
+          } else if (axis == 'Y') {
+            sys.posY += amp * pos;
+            sys.ampY += amp;
+          }
         }
       }
 
-      if (!fDecodingMap.empty()) {
-        if (ampX > 0 && ampY > 0) {
-          fHitMap->Fill(posX / ampX, posY / ampY);
+      for (auto &[sysID, data] : eventSystems) {
+        if (fSpectraMap.count(sysID))
+          fSpectraMap[sysID]->Fill(data.totAmp);
+        if (fHitMapMap.count(sysID) && data.ampX > 0 && data.ampY > 0) {
+          fHitMapMap[sysID]->Fill(data.posX / data.ampX, data.posY / data.ampY);
         }
       }
-
-      if (totAmp)
-        fSpectra->Fill(totAmp);
 
       fEntry++;
     }
 
     // Update the canvas to show the latest processed data
-    TCanvas *can = fMainCanvas->GetCanvas();
-    can->cd(1);
-    fSpectra->Draw();
-    can->cd(2);
-    fHitMap->Draw("COLZ");
-    can->cd(3);
-    fRateGraph->Draw("ALP");
-    can->cd(4);
-    if (fStacks)
-      fStacks->Draw("nostack,l");
-    can->Update();
+    DrawCanvas();
   }
 
   void UpdateRange(Long_t) {
     double newMax = fSpecMaxEntry->GetNumber();
     std::cout << "Range updated " << newMax << std::endl;
-    if (fSpectra == nullptr)
+
+    if (fSpectraMap.empty())
       return;
 
-    fSpectra->SetBins(2048, 0, newMax);
-    fSpectra->Set(2048 + 2);
-    fMainCanvas->GetCanvas()->cd(1);
-    fSpectra->Reset();
+    for (auto const &[id, spec] : fSpectraMap) {
+      spec->SetBins(2048, 0, newMax);
+      spec->Reset();
+    }
 
     if (fMainCanvas) {
-      fMainCanvas->GetCanvas()->cd(1);
-      fSpectra->Draw("HIST"); // Re-dibujamos para asegurar que el Pad use la
-                              // nueva estructura
+      TCanvas *c = fMainCanvas->GetCanvas();
+      c->cd(1);
+
+      bool first = true;
+      for (auto const &[id, spec] : fSpectraMap) {
+        spec->Draw(first ? "HIST" : "HIST SAME");
+        first = false;
+      }
+
       gPad->Modified();
       gPad->Update();
     }
   }
 
   void ManualReset() {
-    fSpectra->Reset();
-    fHitMap->Reset();
+    for (auto const &[id, spec] : fSpectraMap) {
+      spec->Reset();
+    }
+
+    for (auto const &[id, hmap] : fHitMapMap) {
+      hmap->Reset();
+    }
+
     fRateGraph->Set(0);
     fRateGraph->SetPoint(0, 0, 0);
     fRatePoints = 0;
@@ -589,6 +697,13 @@ public:
     if (fi.fFilename)
       LoadDataFile(fi.fFilename);
   }
+
+  void ReloadRun() {
+    if (fBaseFileName == "")
+      return;
+    CheckNewFile(0);
+  }
+
   void OpenDecoding() {
     TGFileInfo fi;
     const char *ft[] = {"ALLFILES", "*", 0, 0};
@@ -616,12 +731,18 @@ public:
     if (!fChain || !fIsRunning || fCheckNextRun->GetState() != kButtonDown)
       return;
 
-    // 1. Refresh current entries
+    // Refresh current entries
     if (fEntry < fChain->GetEntries())
       return;
 
-    // 2. Extract directory and build search patterns
+    CheckNewFile();
+  }
+
+  void CheckNewFile(int offset = 1) {
+
+    // Extract directory and build search patterns
     TString dirName = gSystem->DirName(fBaseFileName);
+    cout << dirName << endl;
     void *dir = gSystem->OpenDirectory(dirName);
     if (!dir)
       return;
@@ -631,13 +752,13 @@ public:
                            fCurrentSubrun + 1);
 
     TString nextRunPattern;
-    nextRunPattern.Form("Run%05d_.*_001.root", fCurrentRun + 1);
+    nextRunPattern.Form("Run%05d_.*_001.root", fCurrentRun + offset);
 
     const char *entry;
     TString foundNextSubrun = "";
     TString foundNextRun = "";
 
-    // 3. Scan directory for matches
+    // Scan directory for matches
     TPRegexp reSub(nextSubrunPattern);
     TPRegexp reRun(nextRunPattern);
 
@@ -655,7 +776,7 @@ public:
     }
     gSystem->FreeDirectory(dir);
 
-    // 4. Load found files
+    // Load found files
     if (foundNextSubrun != "") {
       std::cout << ">>> New Subrun found: " << foundNextSubrun << std::endl;
       fCurrentSubrun++;
@@ -667,7 +788,7 @@ public:
     } else if (foundNextRun != "") {
       std::cout << ">>> New Run detected: " << foundNextRun << std::endl;
       ManualReset(); // Reset histograms for new main Run
-      fCurrentRun++;
+      fCurrentRun += offset;
       fCurrentSubrun = 1;
       fBaseFileName = foundNextRun;
       LoadDataFile(foundNextRun);
@@ -675,12 +796,17 @@ public:
   }
 
   void ClearEvent() {
-    if (fStacks) {
-      delete fStacks;
-      fStacks = nullptr;
+    for (auto const &[id, stack] : fStacksMap) {
+      if (stack) {
+        delete stack;
+      }
     }
-    for (auto h : fHistos)
-      delete h;
+    fStacksMap.clear();
+
+    for (auto h : fHistos) {
+      if (h)
+        delete h;
+    }
     fHistos.clear();
   }
 

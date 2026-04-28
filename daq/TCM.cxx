@@ -63,8 +63,14 @@ void TCM::SendCommand(const char *cmd) {
 
   const size_t size = length / sizeof(uint16_t);
   const short errorCode = buf_rcv[2];
-  if (errorCode)
-    std::cout << "-------- TCM ERROR--------" << std::endl;
+  if (errorCode) {
+    fprintf(stdout, "--------TCM ERROR---------\n");
+    if (TCMProxy.logFile) {
+      fprintf(TCMProxy.logFile, "--------TCM ERROR---------:\n");
+    }
+  }
 
   FEMINOSPacket::ConfigPacket_Print(&buf_rcv[1], size - 1, stdout);
+  if (TCMProxy.logFile)
+    FEMINOSPacket::ConfigPacket_Print(&buf_rcv[1], size - 1, TCMProxy.logFile);
 }

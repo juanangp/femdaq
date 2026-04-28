@@ -23,7 +23,7 @@ int main(int argc, char **argv) {
       ->group("General");
   app.add_flag("--read-only", readOnly, ("Read-only mode"))->group("General");
   app.add_option("-e,--exec", execFile, "Executable file.")->group("General");
-  app.add_option("--tcm", tcm, "To send commands to TCM")->group("General");
+  app.add_flag("--tcm", tcm, ("To send commands to TCM"))->group("General");
 
   CLI11_PARSE(app, argc, argv);
 
@@ -36,13 +36,10 @@ int main(int argc, char **argv) {
   std::signal(SIGINT, signalHandler);  // Ctrl+C
   std::signal(SIGTERM, signalHandler); // kill <pid>
 
-  RunConfig runConfig(configFile);
+  RunConfig runConfig(configFile, tcm);
 
   if (readOnly)
     runConfig.readOnly = true;
-
-  if (tcm)
-    runConfig.isTCM = true;
 
   CommandFetcher cmdFetcher(runConfig);
 

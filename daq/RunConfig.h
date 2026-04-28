@@ -64,7 +64,7 @@ public:
   void UpdateInfo();
 
   RunConfig() = default;
-  RunConfig(const std::string &fN);
+  RunConfig(const std::string &fN, bool isTCM = false);
   ~RunConfig() = default;
 
   void loadConfig();

@@ -16,7 +16,8 @@ CommandFetcher::CommandFetcher(RunConfig &rC) : runConfig(rC) {
   daq = FEMDAQ::Create(runConfig);
 
   // Load history file (create ~/.femdaq_history if it doesn't exist)
-  histFile = std::string(getenv("HOME")) + "/.femdaq_history";
+  const char *home = getenv("HOME");
+  histFile = (home ? std::string(home) : ".") + "/.femdaq_history";
   read_history(histFile.c_str());
   if (runConfig.verboseLevel >= RunConfig::Verbosity::Info)
     std::cout << "History file " << histFile << std::endl;

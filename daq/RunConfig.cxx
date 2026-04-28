@@ -4,7 +4,10 @@
 #include <charconv>
 #include <fstream>
 
-RunConfig::RunConfig(const std::string &fN) : fileName(fN) { loadConfig(); }
+RunConfig::RunConfig(const std::string &fN, bool tcm)
+    : fileName(fN), isTCM(tcm) {
+  loadConfig();
+}
 
 void RunConfig::loadConfig() {
 
@@ -33,14 +36,14 @@ void RunConfig::loadConfig() {
   } else
     verboseLevel = Verbosity::Info;
 
-  if (isTCM)
-    if (!run["TCM"]) {
+  if (isTCM) {
+    if (!run["TCM"])
       throw std::runtime_error(
           "ERROR, TCM requested, but TCM field not found in config file");
-      TCM_IP = run["rawDataPath"].as<std::string>();
-      electronics = "TCM";
-      return;
-    }
+    TCM_IP = run["TCM"].as<std::string>();
+    electronics = "TCM";
+    return;
+  }
 
   // Optional fields with defaults
   experiment = getOrDefault(run, "experiment", experiment);

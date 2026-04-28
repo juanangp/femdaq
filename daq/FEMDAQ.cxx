@@ -15,6 +15,9 @@ std::atomic<bool> FEMDAQ::stopEventBuilder(false);
 
 FEMDAQ::FEMDAQ(RunConfig &rC) : runConfig(rC) {
 
+  std::cout << "------------ " << rC.electronics << " RUN ------------"
+            << std::endl;
+
   if (runConfig.isTCM) {
     FEMProxy FEM;
     FEM.Open(runConfig.TCM_IP);
@@ -109,10 +112,10 @@ std::string FEMDAQ::FormatElapsedTime(const double seconds) {
 
 std::string FEMDAQ::GetTimeStampFromUnixTime(const double tm) {
 
-  char tmpstm[20]; //"YYYY-MM-DD HH:MM:SS" + \0
+  char tmpstm[20]; //"YYYY-MM-DD_HH:MM:SS" + \0
   std::time_t time = static_cast<std::time_t>(tm);
 
-  std::strftime(tmpstm, sizeof(tmpstm), "%Y-%m-%d %H:%M:%S",
+  std::strftime(tmpstm, sizeof(tmpstm), "%Y-%m-%d_%H:%M:%S",
                 std::localtime(&time));
 
   return std::string(tmpstm);
@@ -175,6 +178,12 @@ void FEMDAQ::WriteRunEndTime(const double endTime) {
 }
 
 void FEMDAQ::OpenFiles(const std::vector<std::string> &flags) {
+
+  std::filesystem::path p(runConfig.rawDataPath);
+  if (!std::filesystem::exists(p)) {
+    throw std::runtime_error("Data path: " + runConfig.rawDataPath +
+                             " does not exist");
+  }
 
   fileNameRoot.clear();
   currentRun = -1;
@@ -249,14 +258,17 @@ void FEMDAQ::OpenRootFile() {
 void FEMDAQ::OpenFileLogs() {
 
   const std::string tmstmp = GetTimeStampFromUnixTime(getCurrentTime());
-  std::string fileName = baseFileName;
+  std::string base = baseFileName;
   if (currentRun < 0)
-    fileName = std::filesystem::path(runConfig.rawDataPath) / tmstmp;
+    base = std::filesystem::path(runConfig.rawDataPath) / tmstmp;
+
   for (auto &FEM : FEMArray) {
+    std::string fileName;
     if (runConfig.isTCM)
-      fileName += "_TCM.log";
+      fileName = base + "_TCM.log";
     else
-      fileName += "_FEM" + std::to_string(FEM.femID) + ".log";
+      fileName = base + "_FEM" + std::to_string(FEM.femID) + ".log";
+    std::cout << fileName << std::endl;
     FEM.logFile = fopen(fileName.c_str(), "a");
     fprintf(FEM.logFile, "\n--- LOG FILE INITIALIZED AT %s ---\n",
             tmstmp.c_str());

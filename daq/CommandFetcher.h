@@ -25,7 +25,7 @@ public:
   static bool shutdownRequested();
 
   std::unique_ptr<FEMDAQ> daq;
-  RunConfig runConfig;
+  RunConfig &runConfig;
 
 private:
   void handleCommand(const std::string &line);

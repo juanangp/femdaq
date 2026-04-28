@@ -15,11 +15,26 @@ std::atomic<bool> FEMDAQ::stopEventBuilder(false);
 
 FEMDAQ::FEMDAQ(RunConfig &rC) : runConfig(rC) {
 
-  for (const auto &fem : runConfig.fems) {
+  std::cout << "------------ " << rC.electronics << " RUN ------------"
+            << std::endl;
+
+  if (runConfig.isTCM) {
     FEMProxy FEM;
-    FEM.Open(fem.IP);
-    FEM.femID = fem.id;
+    FEM.Open(runConfig.TCM_IP);
+    FEM.femID = -1;
     FEMArray.emplace_back(std::move(FEM));
+  } else {
+    for (const auto &fem : runConfig.fems) {
+      FEMProxy FEM;
+      FEM.Open(fem.IP);
+      FEM.femID = fem.id;
+      FEMArray.emplace_back(std::move(FEM));
+    }
+  }
+
+  if (FEMArray.empty()) {
+    throw std::runtime_error("No valid FEM/TCM configured for this client, "
+                             "please check your config file");
   }
 }
 
@@ -44,10 +59,10 @@ void FEMDAQ::MakeBaseFileName() {
     }
   }
 
-  int nextRun = maxRun + 1;
+  currentRun = maxRun + 1;
 
   char runStr[16];
-  snprintf(runStr, sizeof(runStr), "Run%05d", nextRun);
+  snprintf(runStr, sizeof(runStr), "Run%05d", currentRun);
 
   std::string base = runStr;
   base += "_" + runConfig.tag;
@@ -57,7 +72,7 @@ void FEMDAQ::MakeBaseFileName() {
   fs::path full = fs::path(directory) / base;
   baseFileName = full.string();
 
-  prometheus.setRunNumber(nextRun);
+  prometheus.setRunNumber(currentRun);
 }
 
 double FEMDAQ::getCurrentTime() {
@@ -97,10 +112,10 @@ std::string FEMDAQ::FormatElapsedTime(const double seconds) {
 
 std::string FEMDAQ::GetTimeStampFromUnixTime(const double tm) {
 
-  char tmpstm[20]; //"YYYY-MM-DD HH:MM:SS" + \0
+  char tmpstm[20]; //"YYYY-MM-DD_HH:MM:SS" + \0
   std::time_t time = static_cast<std::time_t>(tm);
 
-  std::strftime(tmpstm, sizeof(tmpstm), "%Y-%m-%d %H:%M:%S",
+  std::strftime(tmpstm, sizeof(tmpstm), "%Y-%m-%d_%H:%M:%S",
                 std::localtime(&time));
 
   return std::string(tmpstm);
@@ -164,10 +179,14 @@ void FEMDAQ::WriteRunEndTime(const double endTime) {
 
 void FEMDAQ::OpenFiles(const std::vector<std::string> &flags) {
 
-  MakeBaseFileName();
-  fileIndex = 1;
+  std::filesystem::path p(runConfig.rawDataPath);
+  if (!std::filesystem::exists(p)) {
+    throw std::runtime_error("Data path: " + runConfig.rawDataPath +
+                             " does not exist");
+  }
 
   fileNameRoot.clear();
+  currentRun = -1;
 
   CloseLogFiles();
   CloseRootFile();
@@ -194,8 +213,11 @@ void FEMDAQ::OpenFiles(const std::vector<std::string> &flags) {
     }
   }
 
-  if (openRootFile)
+  if (openRootFile) {
+    fileIndex = 1;
+    MakeBaseFileName();
     OpenRootFile();
+  }
   if (openLogFile)
     OpenFileLogs();
 }
@@ -235,12 +257,21 @@ void FEMDAQ::OpenRootFile() {
 
 void FEMDAQ::OpenFileLogs() {
 
+  const std::string tmstmp = GetTimeStampFromUnixTime(getCurrentTime());
+  std::string base = baseFileName;
+  if (currentRun < 0)
+    base = std::filesystem::path(runConfig.rawDataPath) / tmstmp;
+
   for (auto &FEM : FEMArray) {
-    std::string fileName =
-        baseFileName + "_FEM" + std::to_string(FEM.femID) + ".log";
+    std::string fileName;
+    if (runConfig.isTCM)
+      fileName = base + "_TCM.log";
+    else
+      fileName = base + "_FEM" + std::to_string(FEM.femID) + ".log";
+    std::cout << fileName << std::endl;
     FEM.logFile = fopen(fileName.c_str(), "a");
-    std::string ts = GetTimeStampFromUnixTime(getCurrentTime());
-    fprintf(FEM.logFile, "\n--- LOG FILE INITIALIZED AT %s ---\n", ts.c_str());
+    fprintf(FEM.logFile, "\n--- LOG FILE INITIALIZED AT %s ---\n",
+            tmstmp.c_str());
     fflush(FEM.logFile);
     DumpExecFileToFEMLog(FEM);
   }

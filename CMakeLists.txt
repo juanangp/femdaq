@@ -51,6 +51,7 @@ file(
   daq/DCCPacket.cxx
   daq/FEMINOSPacket.cxx
   daq/ARCPacket.cxx
+  daq/TCM.cxx
   daq/PrometheusManager.cxx)
 
 add_library(${PROJECT_NAME} SHARED ${SOURCE_FILES})

@@ -4,7 +4,10 @@
 #include <charconv>
 #include <fstream>
 
-RunConfig::RunConfig(const std::string &fN) : fileName(fN) { loadConfig(); }
+RunConfig::RunConfig(const std::string &fN, bool tcm)
+    : fileName(fN), isTCM(tcm) {
+  loadConfig();
+}
 
 void RunConfig::loadConfig() {
 
@@ -21,11 +24,31 @@ void RunConfig::loadConfig() {
 
   rawDataPath = run["rawDataPath"].as<std::string>();
 
+  // Verbose level
+  verbose = getOrDefault(run, "verbose", verbose);
+
+  if (verbose == "debug")
+    verboseLevel = Verbosity::Debug;
+  else if (verbose == "info")
+    verboseLevel = Verbosity::Info;
+  else if (verbose == "debug") {
+    verboseLevel = Verbosity::Silent;
+  } else
+    verboseLevel = Verbosity::Info;
+
+  if (isTCM) {
+    if (!run["TCM"])
+      throw std::runtime_error(
+          "ERROR, TCM requested, but TCM field not found in config file");
+    TCM_IP = run["TCM"].as<std::string>();
+    electronics = "TCM";
+    return;
+  }
+
   // Optional fields with defaults
   experiment = getOrDefault(run, "experiment", experiment);
   tag = getOrDefault(run, "tag", tag);
   type = getOrDefault(run, "type", type);
-  verbose = getOrDefault(run, "verbose", verbose);
   nEvents = getOrDefault(run, "nEvents", nEvents);
   maxFileSize = getOrDefault(run, "maxFileSize", maxFileSize);
   fileSize = ParseSizeToBytes(maxFileSize);
@@ -36,13 +59,6 @@ void RunConfig::loadConfig() {
   updateRateTime = ParseTimeToSeconds(updateRate);
   if (updateRateTime <= 0)
     updateRateTime = 1;
-
-  if (verbose == "debug")
-    verboseLevel = Verbosity::Debug;
-  else if (verbose == "info")
-    verboseLevel = Verbosity::Info;
-  else
-    verboseLevel = Verbosity::Silent;
 
   // FEM array
   if (run["FEM"]) {
@@ -78,7 +94,7 @@ void RunConfig::loadConfig() {
       fems.emplace_back(std::move(fem));
     }
   } else {
-    std::cout << "ERROR: No FEM entries found in configuration" << std::endl;
+    throw std::runtime_error("ERROR: No FEM entries found in configuration");
   }
 
   if (run["Info"]) {

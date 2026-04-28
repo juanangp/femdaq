@@ -15,6 +15,15 @@ void RunConfig::loadConfig() {
 
   YAML::Node run = root["run"];
 
+  if (isTCM)
+    if (!run["TCM"]) {
+      throw std::runtime_error(
+          "ERROR, TCM requested, but TCM field not found in config file");
+      TCM_IP = run["rawDataPath"].as<std::string>();
+      electronics = "TCM";
+      return;
+    }
+
   // Required fields
   if (!run["rawDataPath"])
     throw std::runtime_error("Missing required field: run.rawDataPath");

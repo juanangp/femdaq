@@ -15,6 +15,7 @@ int main(int argc, char **argv) {
   std::string configFile = "";
   std::string execFile = "";
   bool readOnly = false;
+  bool tcm = false;
 
   CLI::App app{"fem-daq"};
 
@@ -22,6 +23,7 @@ int main(int argc, char **argv) {
       ->group("General");
   app.add_flag("--read-only", readOnly, ("Read-only mode"))->group("General");
   app.add_option("-e,--exec", execFile, "Executable file.")->group("General");
+  app.add_option("--tcm", tcm, "To send commands to TCM")->group("General");
 
   CLI11_PARSE(app, argc, argv);
 
@@ -38,6 +40,9 @@ int main(int argc, char **argv) {
 
   if (readOnly)
     runConfig.readOnly = true;
+
+  if (tcm)
+    runConfig.isTCM = true;
 
   CommandFetcher cmdFetcher(runConfig);
 

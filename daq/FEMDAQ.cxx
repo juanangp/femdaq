@@ -15,11 +15,18 @@ std::atomic<bool> FEMDAQ::stopEventBuilder(false);
 
 FEMDAQ::FEMDAQ(RunConfig &rC) : runConfig(rC) {
 
-  for (const auto &fem : runConfig.fems) {
+  if (runConfig.isTCM) {
     FEMProxy FEM;
-    FEM.Open(fem.IP);
-    FEM.femID = fem.id;
+    FEM.Open(runConfig.TCM_IP);
+    FEM.femID = -1;
     FEMArray.emplace_back(std::move(FEM));
+  } else {
+    for (const auto &fem : runConfig.fems) {
+      FEMProxy FEM;
+      FEM.Open(fem.IP);
+      FEM.femID = fem.id;
+      FEMArray.emplace_back(std::move(FEM));
+    }
   }
 }
 
@@ -44,10 +51,10 @@ void FEMDAQ::MakeBaseFileName() {
     }
   }
 
-  int nextRun = maxRun + 1;
+  currentRun = maxRun + 1;
 
   char runStr[16];
-  snprintf(runStr, sizeof(runStr), "Run%05d", nextRun);
+  snprintf(runStr, sizeof(runStr), "Run%05d", currentRun);
 
   std::string base = runStr;
   base += "_" + runConfig.tag;
@@ -57,7 +64,7 @@ void FEMDAQ::MakeBaseFileName() {
   fs::path full = fs::path(directory) / base;
   baseFileName = full.string();
 
-  prometheus.setRunNumber(nextRun);
+  prometheus.setRunNumber(currentRun);
 }
 
 double FEMDAQ::getCurrentTime() {
@@ -164,10 +171,8 @@ void FEMDAQ::WriteRunEndTime(const double endTime) {
 
 void FEMDAQ::OpenFiles(const std::vector<std::string> &flags) {
 
-  MakeBaseFileName();
-  fileIndex = 1;
-
   fileNameRoot.clear();
+  currentRun = -1;
 
   CloseLogFiles();
   CloseRootFile();
@@ -194,8 +199,11 @@ void FEMDAQ::OpenFiles(const std::vector<std::string> &flags) {
     }
   }
 
-  if (openRootFile)
+  if (openRootFile) {
+    fileIndex = 1;
+    MakeBaseFileName();
     OpenRootFile();
+  }
   if (openLogFile)
     OpenFileLogs();
 }
@@ -235,12 +243,18 @@ void FEMDAQ::OpenRootFile() {
 
 void FEMDAQ::OpenFileLogs() {
 
+  const std::string tmstmp = GetTimeStampFromUnixTime(getCurrentTime());
+  std::string fileName = baseFileName;
+  if (currentRun < 0)
+    fileName = std::filesystem::path(runConfig.rawDataPath) / tmstmp;
   for (auto &FEM : FEMArray) {
-    std::string fileName =
-        baseFileName + "_FEM" + std::to_string(FEM.femID) + ".log";
+    if (runConfig.isTCM)
+      fileName += "_TCM.log";
+    else
+      fileName += "_FEM" + std::to_string(FEM.femID) + ".log";
     FEM.logFile = fopen(fileName.c_str(), "a");
-    std::string ts = GetTimeStampFromUnixTime(getCurrentTime());
-    fprintf(FEM.logFile, "\n--- LOG FILE INITIALIZED AT %s ---\n", ts.c_str());
+    fprintf(FEM.logFile, "\n--- LOG FILE INITIALIZED AT %s ---\n",
+            tmstmp.c_str());
     fflush(FEM.logFile);
     DumpExecFileToFEMLog(FEM);
   }

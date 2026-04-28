@@ -28,6 +28,11 @@ FEMDAQ::FEMDAQ(RunConfig &rC) : runConfig(rC) {
       FEMArray.emplace_back(std::move(FEM));
     }
   }
+
+  if (FEMArray.empty()) {
+    throw std::runtime_error("No valid FEM/TCM configured for this client, "
+                             "please check your config file");
+  }
 }
 
 void FEMDAQ::MakeBaseFileName() {

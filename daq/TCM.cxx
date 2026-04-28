@@ -61,6 +61,10 @@ void TCM::SendCommand(const char *cmd) {
     throw std::runtime_error(error);
   }
 
+  if (TCMProxy.logFile) {
+    fprintf(TCMProxy.logFile, ">> TCM Cmd sent %s\n", cmd);
+  }
+
   const size_t size = length / sizeof(uint16_t);
   const short errorCode = buf_rcv[2];
   if (errorCode) {

@@ -30,6 +30,7 @@ FEMDAQ::FEMDAQ(RunConfig &rC) : runConfig(rC) {
       FEM.femID = fem.id;
       FEMArray.emplace_back(std::move(FEM));
     }
+    prometheus.StartServer();
   }
 
   if (FEMArray.empty()) {

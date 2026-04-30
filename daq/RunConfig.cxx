@@ -1,6 +1,7 @@
 
 #include "RunConfig.h"
 
+#include <algorithm>
 #include <charconv>
 #include <fstream>
 

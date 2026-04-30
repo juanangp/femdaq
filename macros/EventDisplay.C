@@ -25,6 +25,7 @@
 #include <fstream>
 #include <iostream>
 #include <map>
+#include <set>
 #include <thread>
 #include <vector>
 
@@ -90,7 +91,9 @@ public:
     fSpectraMap[1] =
         new TH1F("Spectra1", "Total Amplitude (Sys 1);Amplitude;Counts", 2048,
                  0, 100000);
+    fSpectraMap[1]->SetDirectory(nullptr);
     fHitMapMap[1] = new TH2F("HitMap1", "HitMap (Sys 1);X;Y", 1, 0, 1, 1, 0, 1);
+    fHitMapMap[1]->SetDirectory(nullptr);
     fRateGraph = new TGraph();
     fRateGraph->SetTitle("Rate;Time [s];Rate [Hz]");
     fRateGraph->SetMarkerStyle(20);
@@ -435,9 +438,11 @@ public:
           fHitMapMap[sysID] =
               new TH2F(Form("hHit%d", sysID), Form("HitMap %d;X;Y", sysID),
                        x_set.size(), minX, maxX, y_set.size(), minY, maxY);
+          fHitMapMap[sysID]->SetDirectory(nullptr);
           fSpectraMap[sysID] =
               new TH1F(Form("hSpec%d", sysID), Form("Spectra %d", sysID), 2048,
                        0, fSpecMaxEntry->GetNumber());
+          fSpectraMap[sysID]->SetDirectory(nullptr);
         }
       }
 
@@ -532,6 +537,12 @@ public:
     if (fReader->SetLocalEntry(localEntry) != 0)
       return;
 
+    struct ReadoutSystem {
+      double ampX = 0, ampY = 0, posX = 0, posY = 0, totAmp = 0;
+    };
+    std::vector<short> pulse;
+    pulse.reserve(512);
+
     for (int i = 0; i < eventsToProcess; ++i) {
       // Check if we reached the end of the available data
       if (fEntry >= totalEntries)
@@ -571,15 +582,12 @@ public:
       }
 
       // ... [Rest of the analysis logic: Pulse loop, Spectra fill, HitMap fill]
-      struct ReadoutSystem {
-        double ampX = 0, ampY = 0, posX = 0, posY = 0, totAmp = 0;
-      };
       std::map<int, ReadoutSystem> eventSystems;
 
       for (size_t s = 0; s < fSignalsID->size(); s++) {
         int sID = fSignalsID->at(s);
-        std::vector<short> pulse(fPulses->begin() + s * 512,
-                                 fPulses->begin() + s * 512 + 512);
+        pulse.assign(fPulses->begin() + s * 512,
+                     fPulses->begin() + s * 512 + 512);
         double amp, area;
         int maxP;
         GetParamsFromPulse(pulse, amp, area, maxP);
@@ -605,6 +613,7 @@ public:
                 new THStack(Form("hs%d", sysID), Form("Event %d", fEventID));
 
           TH1S *h = new TH1S(Form("h_s%d", sID), "", 512, 0, 512);
+          h->SetDirectory(nullptr);
           for (int p = 0; p < 512; p++)
             h->SetBinContent(p + 1, pulse[p]);
           h->SetLineColor((sID % 72) + 1);

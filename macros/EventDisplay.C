@@ -69,6 +69,7 @@ private:
 
   int fCurrentRun = -1;
   int fCurrentSubrun = -1;
+  int fCumulativeEntries = 0;
   TString fBaseFileName = "";
   TString fLastDecoFile = "";
 
@@ -512,12 +513,13 @@ public:
 
     if (fEntry >= totalEntries) {
       if (fIsRunning) {
-        fStatusLabel->SetText(
-            Form("Status: Waiting DAQ... (Processed: %lld/%lld)", fEntry,
-                 totalEntries));
+        fStatusLabel->SetText(Form(
+            "Status: Waiting DAQ... (Processed: %lld/%lld)",
+            fCumulativeEntries + fEntry, fCumulativeEntries + totalEntries));
       } else {
-        fStatusLabel->SetText(
-            Form("Status: End of File (%lld/%lld)", fEntry, totalEntries));
+        fStatusLabel->SetText(Form("Status: End of File (%lld/%lld)",
+                                   fCumulativeEntries + fEntry,
+                                   fCumulativeEntries + totalEntries));
       }
       return;
     }
@@ -577,8 +579,9 @@ public:
       bool shouldDraw = (i == eventsToProcess - 1);
       if (shouldDraw) {
         ClearEvent();
-        fStatusLabel->SetText(
-            Form("Status: Running (Ev: %lld / %lld)", fEntry, totalEntries));
+        fStatusLabel->SetText(Form("Status: Running (Ev: %lld / %lld)",
+                                   fCumulativeEntries + fEntry,
+                                   fCumulativeEntries + totalEntries));
       }
 
       // ... [Rest of the analysis logic: Pulse loop, Spectra fill, HitMap fill]
@@ -694,7 +697,8 @@ public:
   }
 
   void SavePlots() {
-    TString outName = Form("Plots_Run%05d_Ev%lld.pdf", fCurrentRun, fEntry);
+    TString outName = Form("Plots_Run%05d_Ev%lld.pdf", fCurrentRun,
+                           fCumulativeEntries + fEntry);
     fMainCanvas->GetCanvas()->SaveAs(outName);
   }
 
@@ -703,8 +707,10 @@ public:
     const char *ft[] = {"ROOT", "*.root", 0, 0};
     fi.fFileTypes = ft;
     new TGFileDialog(gClient->GetRoot(), this, kFDOpen, &fi);
-    if (fi.fFilename)
+    if (fi.fFilename) {
+      fCumulativeEntries = 0;
       LoadDataFile(fi.fFilename);
+    }
   }
 
   void ReloadRun() {
@@ -790,6 +796,7 @@ public:
       std::cout << ">>> New Subrun found: " << foundNextSubrun << std::endl;
       fCurrentSubrun++;
       fBaseFileName = foundNextSubrun;
+      fCumulativeEntries += fChain->GetEntries();
       LoadDataFile(foundNextSubrun, false);
       fDataPathEntry->SetText(gSystem->BaseName(fBaseFileName));
       fDataPathEntry->SetToolTipText(fBaseFileName);
@@ -798,6 +805,7 @@ public:
       std::cout << ">>> New Run detected: " << foundNextRun << std::endl;
       ManualReset(); // Reset histograms for new main Run
       fCurrentRun += offset;
+      fCumulativeEntries = 0;
       fCurrentSubrun = 1;
       fBaseFileName = foundNextRun;
       LoadDataFile(foundNextRun);

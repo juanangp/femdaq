@@ -87,11 +87,24 @@ void CommandFetcher::handleCommand(const std::string &line) {
 }
 
 void CommandFetcher::runInteractive() {
-  char *input;
+  char *input = nullptr;
   std::cout << "?? Interactive CLI ready. Type 'quit' to exit.\n";
+
+  rl_event_hook = []() -> int {
+    if (CommandFetcher::g_shutdown.load()) {
+      rl_done = 1;
+    }
+    return 0;
+  };
 
   while (!shutdownRequested()) {
     input = readline("> ");
+
+    if (shutdownRequested()) {
+      if (input)
+        free(input);
+      break;
+    }
 
     if (!input)
       break;
@@ -105,6 +118,8 @@ void CommandFetcher::runInteractive() {
       handleCommand(line);
     }
   }
+
+  rl_signal_event_hook = nullptr;
 
   // Save full history on exit
   write_history(histFile.c_str());

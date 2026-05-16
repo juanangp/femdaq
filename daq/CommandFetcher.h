@@ -27,10 +27,11 @@ public:
   std::unique_ptr<FEMDAQ> daq;
   RunConfig &runConfig;
 
+  static std::atomic<bool> g_interrupted;
+  static std::atomic<bool> g_shutdown;
+
 private:
   void handleCommand(const std::string &line);
 
-  static std::atomic<bool> g_interrupted;
-  static std::atomic<bool> g_shutdown;
   std::string histFile;
 };

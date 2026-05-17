@@ -131,13 +131,6 @@ void RunConfig::UpdateInfo() {
   std::cout << "Press [ENTER] to keep the default value or type a new one."
             << std::endl;
 
-  rl_event_hook = []() -> int {
-    if (CommandFetcher::g_shutdown.load()) {
-      rl_done = 1;
-    }
-    return 0;
-  };
-
   std::string input;
   char *buffer = nullptr;
 
@@ -151,12 +144,10 @@ void RunConfig::UpdateInfo() {
     if (CommandFetcher::g_shutdown.load()) {
       if (buffer)
         free(buffer);
-      rl_event_hook = nullptr;
       throw std::runtime_error("AddMetadata aborted (CTRL-C)");
     }
 
     if (buffer == nullptr) {
-      rl_event_hook = nullptr;
       throw std::runtime_error("AddMetadata aborted (CTRL-C)");
     }
 

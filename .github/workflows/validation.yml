@@ -37,7 +37,6 @@ jobs:
           export FEMDAQ_INCLUDE_PATH="$FEMDAQ_PATH/inc"
           export PATH="$FEMDAQ_PATH/bin:$PATH"
           export LD_LIBRARY_PATH="$FEMDAQ_PATH/lib:$LD_LIBRARY_PATH"
-          femclient -c config/template.cfg <<EOF
-          quit
-          EOF
+          echo "quit" > script_test.txt
+          femclient -c config/template.cfg -e script_test.txt
           FEMDaqRoot -l -q

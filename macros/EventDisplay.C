@@ -48,10 +48,15 @@ private:
   TTimer *fTimer;
   TTimer *fWatchdogTimer;
 
-  int fEventID;
-  double fTimestamp;
+  std::vector<int> *fSignalsID_Storage = nullptr;
+  std::vector<short> *fPulses_Storage = nullptr;
+  int fEventID_Var = 0;
+  double fTimestamp_Var = 0.0;
+
   std::vector<int> *fSignalsID = nullptr;
   std::vector<short> *fPulses = nullptr;
+  int fEventID = 0;
+  double fTimestamp = 0.0;
 
   Long64_t fEntry = 0;
   int fNChannels = 1;
@@ -343,10 +348,13 @@ public:
     fChain->SetEntries(-1);
     fChain->GetEntries();
 
-    fChain->SetBranchAddress("signalsID", &fSignalsID);
-    fChain->SetBranchAddress("pulses", &fPulses);
-    fChain->SetBranchAddress("eventID", &fEventID);
-    fChain->SetBranchAddress("timestamp", &fTimestamp);
+    fSignalsID_Storage = nullptr;
+    fPulses_Storage = nullptr;
+
+    fChain->SetBranchAddress("signalsID", &fSignalsID_Storage);
+    fChain->SetBranchAddress("pulses", &fPulses_Storage);
+    fChain->SetBranchAddress("eventID", &fEventID_Var);
+    fChain->SetBranchAddress("timestamp", &fTimestamp_Var);
 
     fEntry = 0;
 
@@ -524,6 +532,12 @@ public:
 
       if (fChain->GetEntry(localEntry) <= 0)
         break;
+
+      fEventID = fEventID_Var;
+      fTimestamp = fTimestamp_Var;
+
+      fSignalsID = fSignalsID_Storage;
+      fPulses = fPulses_Storage;
 
       // Rate logic
       if (fEntry == 0) {
@@ -719,7 +733,7 @@ public:
 
     // Extract directory and build search patterns
     TString dirName = gSystem->DirName(fBaseFileName);
-    cout << dirName << endl;
+    // cout << dirName << endl;
     void *dir = gSystem->OpenDirectory(dirName);
     if (!dir)
       return;

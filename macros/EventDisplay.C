@@ -508,12 +508,6 @@ public:
       // "<< fEntry<<endl;
     }
 
-    Long64_t localEntry = fChain->LoadTree(fEntry + eventsToProcess - 1);
-    if (localEntry < 0)
-      return;
-    if (fChain->GetEntry(localEntry) <= 0)
-      return;
-
     struct ReadoutSystem {
       double ampX = 0, ampY = 0, posX = 0, posY = 0, totAmp = 0;
     };
@@ -525,7 +519,7 @@ public:
       if (fEntry >= totalEntries)
         break;
 
-      localEntry = fChain->LoadTree(fEntry);
+      Long64_t localEntry = fChain->LoadTree(fEntry);
 
       if (localEntry < 0)
         break;

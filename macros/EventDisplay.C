@@ -338,7 +338,10 @@ public:
     fBaseFileName = path;
     ParseRunSubrun(fBaseFileName, fCurrentRun, fCurrentSubrun);
 
+    std::cout << "Loading run " << path << endl;
+
     if (fChain) {
+      fChain->ResetBranchAddresses();
       delete fChain;
       fChain = nullptr;
     }
@@ -346,7 +349,17 @@ public:
     fChain = new TChain("SignalEvent");
     fChain->Add(fBaseFileName, -1);
     fChain->SetEntries(-1);
-    fChain->GetEntries();
+    Long64_t initialEntries = fChain->GetEntries();
+
+    if (initialEntries <= 0) {
+      std::cout << "Not valid signal event in file, please reload the file... "
+                << fBaseFileName << std::endl;
+      delete fChain;
+      fChain = nullptr;
+      fStatusLabel->SetText("Status: Waiting for DAQ initialization...");
+      fDataPathEntry->SetText("");
+      return;
+    }
 
     fSignalsID_Storage = nullptr;
     fPulses_Storage = nullptr;
@@ -763,7 +776,7 @@ public:
 
     // Load found files
     if (foundNextSubrun != "") {
-      std::cout << ">>> New Subrun found: " << foundNextSubrun << std::endl;
+      std::cout << ">>> New Subrun found: " << std::endl;
       fCurrentSubrun++;
       fBaseFileName = foundNextSubrun;
       fCumulativeEntries += fChain->GetEntries();
@@ -772,7 +785,7 @@ public:
       fDataPathEntry->SetToolTipText(fBaseFileName);
 
     } else if (foundNextRun != "") {
-      std::cout << ">>> New Run detected: " << foundNextRun << std::endl;
+      std::cout << ">>> New Run detected: " << std::endl;
       ManualReset(); // Reset histograms for new main Run
       fCurrentRun += offset;
       fCumulativeEntries = 0;

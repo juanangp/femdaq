@@ -236,11 +236,15 @@ void FEMDAQ::OpenRootFile() {
   std::cout << "New file " << fileNameRoot << " " << std::endl;
 
   fileRoot = std::make_unique<TFile>(fileNameRoot.c_str(), "RECREATE");
+  fileRoot->SetCompressionAlgorithm(
+      ROOT::RCompressionSetting::EAlgorithm::kZLIB);
+  fileRoot->SetCompressionLevel(1);
   event_tree = std::make_unique<TTree>("SignalEvent", "Signal events");
   event_tree->Branch("eventID", &sEvent.eventID);
   event_tree->Branch("timestamp", &sEvent.timestamp);
   event_tree->Branch("signalsID", &sEvent.signalsID);
   event_tree->Branch("pulses", &sEvent.pulses);
+  event_tree->SetAutoFlush(-30000000); // 30 MB
 
   const std::string yamlDump = runConfig.Dump();
   TObjString yamlObj(yamlDump.c_str());

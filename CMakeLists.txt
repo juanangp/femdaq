@@ -10,7 +10,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
 find_package(Threads REQUIRED)
-find_package(ROOT REQUIRED COMPONENTS Core RIO Tree)
+find_package(ROOT 6.14 REQUIRED COMPONENTS Core RIO Tree)
 find_package(yaml-cpp REQUIRED)
 find_package(Readline REQUIRED)
 
@@ -19,7 +19,7 @@ include(FetchContent)
 FetchContent_Declare(
   CLI11
   GIT_REPOSITORY https://github.com/CLIUtils/CLI11.git
-  GIT_TAG v2.4.2)
+  GIT_TAG v2.6.2)
 FetchContent_MakeAvailable(CLI11)
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)

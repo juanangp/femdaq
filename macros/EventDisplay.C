@@ -20,7 +20,6 @@
 #include <TSystem.h>
 #include <TTimer.h>
 #include <TTree.h>
-#include <TTreeReader.h>
 #include <chrono>
 #include <fstream>
 #include <iostream>
@@ -45,16 +44,9 @@ private:
   TGNumberEntry *fSpecMaxEntry;
 
   TChain *fChain = nullptr;
-  TTreeReader *fReader = nullptr;
   std::map<int, std::pair<std::string, double>> fDecodingMap;
   TTimer *fTimer;
   TTimer *fWatchdogTimer;
-
-  // Lectores para tus ramas específicas
-  TTreeReaderValue<std::vector<int>> *fReaderSignalsID = nullptr;
-  TTreeReaderValue<std::vector<short>> *fReaderPulses = nullptr;
-  TTreeReaderValue<int> *fReaderEventID = nullptr;
-  TTreeReaderValue<double> *fReaderTimestamp = nullptr;
 
   int fEventID;
   double fTimestamp;
@@ -340,26 +332,7 @@ public:
       return;
     fBaseFileName = path;
     ParseRunSubrun(fBaseFileName, fCurrentRun, fCurrentSubrun);
-    if (fReaderSignalsID) {
-      delete fReaderSignalsID;
-      fReaderSignalsID = nullptr;
-    }
-    if (fReaderPulses) {
-      delete fReaderPulses;
-      fReaderPulses = nullptr;
-    }
-    if (fReaderEventID) {
-      delete fReaderEventID;
-      fReaderEventID = nullptr;
-    }
-    if (fReaderTimestamp) {
-      delete fReaderTimestamp;
-      fReaderTimestamp = nullptr;
-    }
-    if (fReader) {
-      delete fReader;
-      fReader = nullptr;
-    }
+
     if (fChain) {
       delete fChain;
       fChain = nullptr;
@@ -370,19 +343,16 @@ public:
     fChain->SetEntries(-1);
     fChain->GetEntries();
 
+    fChain->SetBranchAddress("signalsID", &fSignalsID);
+    fChain->SetBranchAddress("pulses", &fPulses);
+    fChain->SetBranchAddress("eventID", &fEventID);
+    fChain->SetBranchAddress("timestamp", &fTimestamp);
+
     fEntry = 0;
 
     if (newRun) {
       ManualReset();
     }
-
-    fReader = new TTreeReader(fChain);
-    fReaderSignalsID =
-        new TTreeReaderValue<std::vector<int>>(*fReader, "signalsID");
-    fReaderPulses =
-        new TTreeReaderValue<std::vector<short>>(*fReader, "pulses");
-    fReaderEventID = new TTreeReaderValue<int>(*fReader, "eventID");
-    fReaderTimestamp = new TTreeReaderValue<double>(*fReader, "timestamp");
 
     fDataPathEntry->SetText(gSystem->BaseName(path));
     fDataPathEntry->SetToolTipText(path);
@@ -500,13 +470,10 @@ public:
   }
 
   void NextEvent() {
-    if (!fReader || !fChain)
+    if (!fChain)
       return;
 
-    if (fChain->GetTree()) {
-      fChain->GetTree()->Refresh();
-      fChain->GetTree()->SetTreeIndex(0);
-    }
+    fChain->Refresh();
 
     fChain->SetEntries(-1);
     Long64_t totalEntries = fChain->GetEntries();
@@ -536,7 +503,7 @@ public:
     Long64_t localEntry = fChain->LoadTree(fEntry + eventsToProcess - 1);
     if (localEntry < 0)
       return;
-    if (fReader->SetLocalEntry(localEntry) != 0)
+    if (fChain->GetEntry(localEntry) <= 0)
       return;
 
     struct ReadoutSystem {
@@ -555,13 +522,8 @@ public:
       if (localEntry < 0)
         break;
 
-      if (fReader->SetLocalEntry(localEntry) != 0)
+      if (fChain->GetEntry(localEntry) <= 0)
         break;
-
-      fEventID = **fReaderEventID;
-      fTimestamp = **fReaderTimestamp;
-      fSignalsID = &(**fReaderSignalsID);
-      fPulses = &(**fReaderPulses);
 
       // Rate logic
       if (fEntry == 0) {
@@ -853,8 +815,6 @@ public:
 
   virtual ~DAQGUI() {
     ClearEvent();
-    if (fReader)
-      delete fReader;
     if (fChain)
       delete fChain;
     if (fTimer)

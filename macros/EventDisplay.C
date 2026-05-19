@@ -340,6 +340,12 @@ public:
       return;
     fBaseFileName = path;
     ParseRunSubrun(fBaseFileName, fCurrentRun, fCurrentSubrun);
+
+    std::cout << "Opening file " << path << std::endl;
+
+    fDataPathEntry->SetText(gSystem->BaseName(path));
+    fDataPathEntry->SetToolTipText(path);
+
     if (fReaderSignalsID) {
       delete fReaderSignalsID;
       fReaderSignalsID = nullptr;
@@ -368,7 +374,16 @@ public:
     fChain = new TChain("SignalEvent");
     fChain->Add(fBaseFileName, -1);
     fChain->SetEntries(-1);
-    fChain->GetEntries();
+
+    if (fChain->GetEntries() <= 0) {
+      std::cout << "Not valid signal event in file, please reload the file... "
+                << fBaseFileName << std::endl;
+      delete fChain;
+      fChain = nullptr;
+      fStatusLabel->SetText("Status: Waiting for DAQ initialization...");
+      fDataPathEntry->SetText("");
+      return;
+    }
 
     fEntry = 0;
 
@@ -384,8 +399,6 @@ public:
     fReaderEventID = new TTreeReaderValue<int>(*fReader, "eventID");
     fReaderTimestamp = new TTreeReaderValue<double>(*fReader, "timestamp");
 
-    fDataPathEntry->SetText(gSystem->BaseName(path));
-    fDataPathEntry->SetToolTipText(path);
     SetWindowName(Form("DAQ Viewer - %s", gSystem->BaseName(path)));
     NextEvent();
   }
@@ -506,6 +519,8 @@ public:
     if (fChain->GetTree()) {
       fChain->GetTree()->Refresh();
       fChain->GetTree()->SetTreeIndex(0);
+    } else {
+      return;
     }
 
     fChain->SetEntries(-1);
@@ -533,11 +548,12 @@ public:
       // "<< fEntry<<endl;
     }
 
-    Long64_t localEntry = fChain->LoadTree(fEntry + eventsToProcess - 1);
-    if (localEntry < 0)
+    Long64_t localEntry = fEntry + eventsToProcess - 1;
+
+    if (fReader->SetEntry(localEntry) != TTreeReader::kEntryValid) {
+      // std::cout << "Not valid entry, skipping..." << std::endl;
       return;
-    if (fReader->SetLocalEntry(localEntry) != 0)
-      return;
+    }
 
     struct ReadoutSystem {
       double ampX = 0, ampY = 0, posX = 0, posY = 0, totAmp = 0;
@@ -550,13 +566,9 @@ public:
       if (fEntry >= totalEntries)
         break;
 
-      localEntry = fChain->LoadTree(fEntry);
-
-      if (localEntry < 0)
+      if (fReader->SetEntry(fEntry) != TTreeReader::kEntryValid) {
         break;
-
-      if (fReader->SetLocalEntry(localEntry) != 0)
-        break;
+      }
 
       fEventID = **fReaderEventID;
       fTimestamp = **fReaderTimestamp;
@@ -757,7 +769,7 @@ public:
 
     // Extract directory and build search patterns
     TString dirName = gSystem->DirName(fBaseFileName);
-    cout << dirName << endl;
+    // cout << dirName << endl;
     void *dir = gSystem->OpenDirectory(dirName);
     if (!dir)
       return;
@@ -793,7 +805,7 @@ public:
 
     // Load found files
     if (foundNextSubrun != "") {
-      std::cout << ">>> New Subrun found: " << foundNextSubrun << std::endl;
+      std::cout << ">>> New Subrun found: " << std::endl;
       fCurrentSubrun++;
       fBaseFileName = foundNextSubrun;
       fCumulativeEntries += fChain->GetEntries();
@@ -802,7 +814,7 @@ public:
       fDataPathEntry->SetToolTipText(fBaseFileName);
 
     } else if (foundNextRun != "") {
-      std::cout << ">>> New Run detected: " << foundNextRun << std::endl;
+      std::cout << ">>> New Run detected: " << std::endl;
       ManualReset(); // Reset histograms for new main Run
       fCurrentRun += offset;
       fCumulativeEntries = 0;

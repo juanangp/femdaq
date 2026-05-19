@@ -20,6 +20,7 @@
 #include <TSystem.h>
 #include <TTimer.h>
 #include <TTree.h>
+#include <TTreeReader.h>
 #include <chrono>
 #include <fstream>
 #include <iostream>
@@ -44,19 +45,21 @@ private:
   TGNumberEntry *fSpecMaxEntry;
 
   TChain *fChain = nullptr;
+  TTreeReader *fReader = nullptr;
   std::map<int, std::pair<std::string, double>> fDecodingMap;
   TTimer *fTimer;
   TTimer *fWatchdogTimer;
 
-  std::vector<int> *fSignalsID_Storage = nullptr;
-  std::vector<short> *fPulses_Storage = nullptr;
-  int fEventID_Var = 0;
-  double fTimestamp_Var = 0.0;
+  // Lectores para tus ramas específicas
+  TTreeReaderValue<std::vector<int>> *fReaderSignalsID = nullptr;
+  TTreeReaderValue<std::vector<short>> *fReaderPulses = nullptr;
+  TTreeReaderValue<int> *fReaderEventID = nullptr;
+  TTreeReaderValue<double> *fReaderTimestamp = nullptr;
 
+  int fEventID;
+  double fTimestamp;
   std::vector<int> *fSignalsID = nullptr;
   std::vector<short> *fPulses = nullptr;
-  int fEventID = 0;
-  double fTimestamp = 0.0;
 
   Long64_t fEntry = 0;
   int fNChannels = 1;
@@ -337,11 +340,27 @@ public:
       return;
     fBaseFileName = path;
     ParseRunSubrun(fBaseFileName, fCurrentRun, fCurrentSubrun);
-
-    std::cout << "Loading run " << path << endl;
-
+    if (fReaderSignalsID) {
+      delete fReaderSignalsID;
+      fReaderSignalsID = nullptr;
+    }
+    if (fReaderPulses) {
+      delete fReaderPulses;
+      fReaderPulses = nullptr;
+    }
+    if (fReaderEventID) {
+      delete fReaderEventID;
+      fReaderEventID = nullptr;
+    }
+    if (fReaderTimestamp) {
+      delete fReaderTimestamp;
+      fReaderTimestamp = nullptr;
+    }
+    if (fReader) {
+      delete fReader;
+      fReader = nullptr;
+    }
     if (fChain) {
-      fChain->ResetBranchAddresses();
       delete fChain;
       fChain = nullptr;
     }
@@ -349,31 +368,21 @@ public:
     fChain = new TChain("SignalEvent");
     fChain->Add(fBaseFileName, -1);
     fChain->SetEntries(-1);
-    Long64_t initialEntries = fChain->GetEntries();
-
-    if (initialEntries <= 0) {
-      std::cout << "Not valid signal event in file, please reload the file... "
-                << fBaseFileName << std::endl;
-      delete fChain;
-      fChain = nullptr;
-      fStatusLabel->SetText("Status: Waiting for DAQ initialization...");
-      fDataPathEntry->SetText("");
-      return;
-    }
-
-    fSignalsID_Storage = nullptr;
-    fPulses_Storage = nullptr;
-
-    fChain->SetBranchAddress("signalsID", &fSignalsID_Storage);
-    fChain->SetBranchAddress("pulses", &fPulses_Storage);
-    fChain->SetBranchAddress("eventID", &fEventID_Var);
-    fChain->SetBranchAddress("timestamp", &fTimestamp_Var);
+    fChain->GetEntries();
 
     fEntry = 0;
 
     if (newRun) {
       ManualReset();
     }
+
+    fReader = new TTreeReader(fChain);
+    fReaderSignalsID =
+        new TTreeReaderValue<std::vector<int>>(*fReader, "signalsID");
+    fReaderPulses =
+        new TTreeReaderValue<std::vector<short>>(*fReader, "pulses");
+    fReaderEventID = new TTreeReaderValue<int>(*fReader, "eventID");
+    fReaderTimestamp = new TTreeReaderValue<double>(*fReader, "timestamp");
 
     fDataPathEntry->SetText(gSystem->BaseName(path));
     fDataPathEntry->SetToolTipText(path);
@@ -491,10 +500,13 @@ public:
   }
 
   void NextEvent() {
-    if (!fChain)
+    if (!fReader || !fChain)
       return;
 
-    fChain->Refresh();
+    if (fChain->GetTree()) {
+      fChain->GetTree()->Refresh();
+      fChain->GetTree()->SetTreeIndex(0);
+    }
 
     fChain->SetEntries(-1);
     Long64_t totalEntries = fChain->GetEntries();
@@ -521,6 +533,12 @@ public:
       // "<< fEntry<<endl;
     }
 
+    Long64_t localEntry = fChain->LoadTree(fEntry + eventsToProcess - 1);
+    if (localEntry < 0)
+      return;
+    if (fReader->SetLocalEntry(localEntry) != 0)
+      return;
+
     struct ReadoutSystem {
       double ampX = 0, ampY = 0, posX = 0, posY = 0, totAmp = 0;
     };
@@ -532,19 +550,18 @@ public:
       if (fEntry >= totalEntries)
         break;
 
-      Long64_t localEntry = fChain->LoadTree(fEntry);
+      localEntry = fChain->LoadTree(fEntry);
 
       if (localEntry < 0)
         break;
 
-      if (fChain->GetEntry(localEntry) <= 0)
+      if (fReader->SetLocalEntry(localEntry) != 0)
         break;
 
-      fEventID = fEventID_Var;
-      fTimestamp = fTimestamp_Var;
-
-      fSignalsID = fSignalsID_Storage;
-      fPulses = fPulses_Storage;
+      fEventID = **fReaderEventID;
+      fTimestamp = **fReaderTimestamp;
+      fSignalsID = &(**fReaderSignalsID);
+      fPulses = &(**fReaderPulses);
 
       // Rate logic
       if (fEntry == 0) {
@@ -740,7 +757,7 @@ public:
 
     // Extract directory and build search patterns
     TString dirName = gSystem->DirName(fBaseFileName);
-    // cout << dirName << endl;
+    cout << dirName << endl;
     void *dir = gSystem->OpenDirectory(dirName);
     if (!dir)
       return;
@@ -776,7 +793,7 @@ public:
 
     // Load found files
     if (foundNextSubrun != "") {
-      std::cout << ">>> New Subrun found: " << std::endl;
+      std::cout << ">>> New Subrun found: " << foundNextSubrun << std::endl;
       fCurrentSubrun++;
       fBaseFileName = foundNextSubrun;
       fCumulativeEntries += fChain->GetEntries();
@@ -785,7 +802,7 @@ public:
       fDataPathEntry->SetToolTipText(fBaseFileName);
 
     } else if (foundNextRun != "") {
-      std::cout << ">>> New Run detected: " << std::endl;
+      std::cout << ">>> New Run detected: " << foundNextRun << std::endl;
       ManualReset(); // Reset histograms for new main Run
       fCurrentRun += offset;
       fCumulativeEntries = 0;
@@ -836,6 +853,8 @@ public:
 
   virtual ~DAQGUI() {
     ClearEvent();
+    if (fReader)
+      delete fReader;
     if (fChain)
       delete fChain;
     if (fTimer)

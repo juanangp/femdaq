@@ -16,7 +16,8 @@ CommandFetcher::CommandFetcher(RunConfig &rC) : runConfig(rC) {
   daq = FEMDAQ::Create(runConfig);
 
   // Load history file (create ~/.femdaq_history if it doesn't exist)
-  histFile = std::string(getenv("HOME")) + "/.femdaq_history";
+  const char *home = getenv("HOME");
+  histFile = (home ? std::string(home) : ".") + "/.femdaq_history";
   read_history(histFile.c_str());
   if (runConfig.verboseLevel >= RunConfig::Verbosity::Info)
     std::cout << "History file " << histFile << std::endl;
@@ -86,17 +87,27 @@ void CommandFetcher::handleCommand(const std::string &line) {
 }
 
 void CommandFetcher::runInteractive() {
-  char *input;
   std::cout << "?? Interactive CLI ready. Type 'quit' to exit.\n";
 
   while (!shutdownRequested()) {
-    input = readline("> ");
+    char *input = readline("> ");
+
+    if (shutdownRequested()) {
+      if (input)
+        free(input);
+      break;
+    }
 
     if (!input)
       break;
 
     std::string line(input);
     free(input);
+    input = nullptr;
+
+    if (!line.empty() && line.back() == '\r') {
+      line.pop_back();
+    }
 
     if (!line.empty()) {
       add_history(line.c_str());

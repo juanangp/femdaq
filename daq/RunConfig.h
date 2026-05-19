@@ -28,7 +28,9 @@ public:
   std::string maxFileSize = "1Gb";
   std::string electronics = "";
   std::vector<FEM> fems;
+  std::string TCM_IP = "";
   bool readOnly = false;
+  bool isTCM = false;
 
   std::map<std::string, std::string> runInfo;
 
@@ -62,7 +64,7 @@ public:
   void UpdateInfo();
 
   RunConfig() = default;
-  RunConfig(const std::string &fN);
+  RunConfig(const std::string &fN, bool isTCM = false);
   ~RunConfig() = default;
 
   void loadConfig();

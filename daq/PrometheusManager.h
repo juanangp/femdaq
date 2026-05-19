@@ -11,7 +11,7 @@
 class PrometheusManager {
 public:
   // Constructor
-  PrometheusManager(const std::string &address = "0.0.0.0:8080");
+  PrometheusManager();
 
   void setRunNumber(int num);
   void setRate(double rate);
@@ -19,8 +19,10 @@ public:
   void setMetadata(const std::string &name);
   void setRunName(const std::string &name);
 
+  void StartServer(const std::string &address = "0.0.0.0:8080");
+
 private:
-  prometheus::Exposer _exposer;
+  std::unique_ptr<prometheus::Exposer> _exposer;
   std::shared_ptr<prometheus::Registry> _registry;
 
   prometheus::Gauge &_runNumberGauge;

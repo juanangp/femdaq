@@ -1,10 +1,16 @@
 
 #include "RunConfig.h"
+#include "CommandFetcher.h"
 
+#include <algorithm>
 #include <charconv>
 #include <fstream>
+#include <readline/readline.h>
 
-RunConfig::RunConfig(const std::string &fN) : fileName(fN) { loadConfig(); }
+RunConfig::RunConfig(const std::string &fN, bool tcm)
+    : fileName(fN), isTCM(tcm) {
+  loadConfig();
+}
 
 void RunConfig::loadConfig() {
 
@@ -21,11 +27,31 @@ void RunConfig::loadConfig() {
 
   rawDataPath = run["rawDataPath"].as<std::string>();
 
+  // Verbose level
+  verbose = getOrDefault(run, "verbose", verbose);
+
+  if (verbose == "debug")
+    verboseLevel = Verbosity::Debug;
+  else if (verbose == "info")
+    verboseLevel = Verbosity::Info;
+  else if (verbose == "debug") {
+    verboseLevel = Verbosity::Silent;
+  } else
+    verboseLevel = Verbosity::Info;
+
+  if (isTCM) {
+    if (!run["TCM"])
+      throw std::runtime_error(
+          "ERROR, TCM requested, but TCM field not found in config file");
+    TCM_IP = run["TCM"].as<std::string>();
+    electronics = "TCM";
+    return;
+  }
+
   // Optional fields with defaults
   experiment = getOrDefault(run, "experiment", experiment);
   tag = getOrDefault(run, "tag", tag);
   type = getOrDefault(run, "type", type);
-  verbose = getOrDefault(run, "verbose", verbose);
   nEvents = getOrDefault(run, "nEvents", nEvents);
   maxFileSize = getOrDefault(run, "maxFileSize", maxFileSize);
   fileSize = ParseSizeToBytes(maxFileSize);
@@ -36,13 +62,6 @@ void RunConfig::loadConfig() {
   updateRateTime = ParseTimeToSeconds(updateRate);
   if (updateRateTime <= 0)
     updateRateTime = 1;
-
-  if (verbose == "debug")
-    verboseLevel = Verbosity::Debug;
-  else if (verbose == "info")
-    verboseLevel = Verbosity::Info;
-  else
-    verboseLevel = Verbosity::Silent;
 
   // FEM array
   if (run["FEM"]) {
@@ -78,7 +97,7 @@ void RunConfig::loadConfig() {
       fems.emplace_back(std::move(fem));
     }
   } else {
-    std::cout << "ERROR: No FEM entries found in configuration" << std::endl;
+    throw std::runtime_error("ERROR: No FEM entries found in configuration");
   }
 
   if (run["Info"]) {
@@ -113,26 +132,44 @@ void RunConfig::UpdateInfo() {
             << std::endl;
 
   std::string input;
+  char *buffer = nullptr;
 
-  std::cout << ">>>> Run Tag (" << tag << "): ";
-  std::getline(std::cin, input);
+  auto readField = [&](const std::string &prompt) -> std::string {
+    if (CommandFetcher::g_shutdown.load()) {
+      throw std::runtime_error("AddMetadata aborted (CTRL-C)");
+    }
+
+    buffer = readline(prompt.c_str());
+
+    if (CommandFetcher::g_shutdown.load()) {
+      if (buffer)
+        free(buffer);
+      throw std::runtime_error("AddMetadata aborted (CTRL-C)");
+    }
+
+    if (buffer == nullptr) {
+      throw std::runtime_error("AddMetadata aborted (CTRL-C)");
+    }
+
+    std::string str(buffer);
+    free(buffer);
+    return str;
+  };
+
+  input = readField(">>>> Run Tag (" + tag + "): ");
   if (!input.empty()) {
     tag = input;
     root["run"]["tag"] = tag;
   }
 
-  std::cout << ">>>> Run Type (" << type << "): ";
-  std::getline(std::cin, input);
+  input = readField(">>>> Run Type (" + type + "): ");
   if (!input.empty()) {
     type = input;
     root["run"]["type"] = type;
   }
 
   for (auto &[field, value] : runInfo) {
-    std::cout << " >>>> " << field << " (" << value << "): ";
-    std::getline(std::cin, input);
-    // If the user typed something, update the value.
-    // If they just pressed Enter, input will be empty.
+    input = readField(" >>>> " + field + " (" + value + "): ");
     if (!input.empty()) {
       value = input;
       root["run"]["Info"][field] = value;

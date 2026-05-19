@@ -25,6 +25,7 @@
 #include <fstream>
 #include <iostream>
 #include <map>
+#include <set>
 #include <thread>
 #include <vector>
 
@@ -68,6 +69,7 @@ private:
 
   int fCurrentRun = -1;
   int fCurrentSubrun = -1;
+  int fCumulativeEntries = 0;
   TString fBaseFileName = "";
   TString fLastDecoFile = "";
 
@@ -90,7 +92,9 @@ public:
     fSpectraMap[1] =
         new TH1F("Spectra1", "Total Amplitude (Sys 1);Amplitude;Counts", 2048,
                  0, 100000);
+    fSpectraMap[1]->SetDirectory(nullptr);
     fHitMapMap[1] = new TH2F("HitMap1", "HitMap (Sys 1);X;Y", 1, 0, 1, 1, 0, 1);
+    fHitMapMap[1]->SetDirectory(nullptr);
     fRateGraph = new TGraph();
     fRateGraph->SetTitle("Rate;Time [s];Rate [Hz]");
     fRateGraph->SetMarkerStyle(20);
@@ -336,6 +340,12 @@ public:
       return;
     fBaseFileName = path;
     ParseRunSubrun(fBaseFileName, fCurrentRun, fCurrentSubrun);
+
+    std::cout << "Opening file " << path << std::endl;
+
+    fDataPathEntry->SetText(gSystem->BaseName(path));
+    fDataPathEntry->SetToolTipText(path);
+
     if (fReaderSignalsID) {
       delete fReaderSignalsID;
       fReaderSignalsID = nullptr;
@@ -364,7 +374,16 @@ public:
     fChain = new TChain("SignalEvent");
     fChain->Add(fBaseFileName, -1);
     fChain->SetEntries(-1);
-    fChain->GetEntries();
+
+    if (fChain->GetEntries() <= 0) {
+      std::cout << "Not valid signal event in file, please reload the file... "
+                << fBaseFileName << std::endl;
+      delete fChain;
+      fChain = nullptr;
+      fStatusLabel->SetText("Status: Waiting for DAQ initialization...");
+      fDataPathEntry->SetText("");
+      return;
+    }
 
     fEntry = 0;
 
@@ -380,8 +399,6 @@ public:
     fReaderEventID = new TTreeReaderValue<int>(*fReader, "eventID");
     fReaderTimestamp = new TTreeReaderValue<double>(*fReader, "timestamp");
 
-    fDataPathEntry->SetText(gSystem->BaseName(path));
-    fDataPathEntry->SetToolTipText(path);
     SetWindowName(Form("DAQ Viewer - %s", gSystem->BaseName(path)));
     NextEvent();
   }
@@ -435,9 +452,11 @@ public:
           fHitMapMap[sysID] =
               new TH2F(Form("hHit%d", sysID), Form("HitMap %d;X;Y", sysID),
                        x_set.size(), minX, maxX, y_set.size(), minY, maxY);
+          fHitMapMap[sysID]->SetDirectory(nullptr);
           fSpectraMap[sysID] =
               new TH1F(Form("hSpec%d", sysID), Form("Spectra %d", sysID), 2048,
                        0, fSpecMaxEntry->GetNumber());
+          fSpectraMap[sysID]->SetDirectory(nullptr);
         }
       }
 
@@ -500,6 +519,8 @@ public:
     if (fChain->GetTree()) {
       fChain->GetTree()->Refresh();
       fChain->GetTree()->SetTreeIndex(0);
+    } else {
+      return;
     }
 
     fChain->SetEntries(-1);
@@ -507,12 +528,13 @@ public:
 
     if (fEntry >= totalEntries) {
       if (fIsRunning) {
-        fStatusLabel->SetText(
-            Form("Status: Waiting DAQ... (Processed: %lld/%lld)", fEntry,
-                 totalEntries));
+        fStatusLabel->SetText(Form(
+            "Status: Waiting DAQ... (Processed: %lld/%lld)",
+            fCumulativeEntries + fEntry, fCumulativeEntries + totalEntries));
       } else {
-        fStatusLabel->SetText(
-            Form("Status: End of File (%lld/%lld)", fEntry, totalEntries));
+        fStatusLabel->SetText(Form("Status: End of File (%lld/%lld)",
+                                   fCumulativeEntries + fEntry,
+                                   fCumulativeEntries + totalEntries));
       }
       return;
     }
@@ -526,24 +548,27 @@ public:
       // "<< fEntry<<endl;
     }
 
-    Long64_t localEntry = fChain->LoadTree(fEntry + eventsToProcess - 1);
-    if (localEntry < 0)
+    Long64_t localEntry = fEntry + eventsToProcess - 1;
+
+    if (fReader->SetEntry(localEntry) != TTreeReader::kEntryValid) {
+      // std::cout << "Not valid entry, skipping..." << std::endl;
       return;
-    if (fReader->SetLocalEntry(localEntry) != 0)
-      return;
+    }
+
+    struct ReadoutSystem {
+      double ampX = 0, ampY = 0, posX = 0, posY = 0, totAmp = 0;
+    };
+    std::vector<short> pulse;
+    pulse.reserve(512);
 
     for (int i = 0; i < eventsToProcess; ++i) {
       // Check if we reached the end of the available data
       if (fEntry >= totalEntries)
         break;
 
-      localEntry = fChain->LoadTree(fEntry);
-
-      if (localEntry < 0)
+      if (fReader->SetEntry(fEntry) != TTreeReader::kEntryValid) {
         break;
-
-      if (fReader->SetLocalEntry(localEntry) != 0)
-        break;
+      }
 
       fEventID = **fReaderEventID;
       fTimestamp = **fReaderTimestamp;
@@ -566,20 +591,18 @@ public:
       bool shouldDraw = (i == eventsToProcess - 1);
       if (shouldDraw) {
         ClearEvent();
-        fStatusLabel->SetText(
-            Form("Status: Running (Ev: %lld / %lld)", fEntry, totalEntries));
+        fStatusLabel->SetText(Form("Status: Running (Ev: %lld / %lld)",
+                                   fCumulativeEntries + fEntry,
+                                   fCumulativeEntries + totalEntries));
       }
 
       // ... [Rest of the analysis logic: Pulse loop, Spectra fill, HitMap fill]
-      struct ReadoutSystem {
-        double ampX = 0, ampY = 0, posX = 0, posY = 0, totAmp = 0;
-      };
       std::map<int, ReadoutSystem> eventSystems;
 
       for (size_t s = 0; s < fSignalsID->size(); s++) {
         int sID = fSignalsID->at(s);
-        std::vector<short> pulse(fPulses->begin() + s * 512,
-                                 fPulses->begin() + s * 512 + 512);
+        pulse.assign(fPulses->begin() + s * 512,
+                     fPulses->begin() + s * 512 + 512);
         double amp, area;
         int maxP;
         GetParamsFromPulse(pulse, amp, area, maxP);
@@ -605,6 +628,7 @@ public:
                 new THStack(Form("hs%d", sysID), Form("Event %d", fEventID));
 
           TH1S *h = new TH1S(Form("h_s%d", sID), "", 512, 0, 512);
+          h->SetDirectory(nullptr);
           for (int p = 0; p < 512; p++)
             h->SetBinContent(p + 1, pulse[p]);
           h->SetLineColor((sID % 72) + 1);
@@ -685,7 +709,8 @@ public:
   }
 
   void SavePlots() {
-    TString outName = Form("Plots_Run%05d_Ev%lld.pdf", fCurrentRun, fEntry);
+    TString outName = Form("Plots_Run%05d_Ev%lld.pdf", fCurrentRun,
+                           fCumulativeEntries + fEntry);
     fMainCanvas->GetCanvas()->SaveAs(outName);
   }
 
@@ -694,8 +719,10 @@ public:
     const char *ft[] = {"ROOT", "*.root", 0, 0};
     fi.fFileTypes = ft;
     new TGFileDialog(gClient->GetRoot(), this, kFDOpen, &fi);
-    if (fi.fFilename)
+    if (fi.fFilename) {
+      fCumulativeEntries = 0;
       LoadDataFile(fi.fFilename);
+    }
   }
 
   void ReloadRun() {
@@ -742,7 +769,7 @@ public:
 
     // Extract directory and build search patterns
     TString dirName = gSystem->DirName(fBaseFileName);
-    cout << dirName << endl;
+    // cout << dirName << endl;
     void *dir = gSystem->OpenDirectory(dirName);
     if (!dir)
       return;
@@ -778,17 +805,19 @@ public:
 
     // Load found files
     if (foundNextSubrun != "") {
-      std::cout << ">>> New Subrun found: " << foundNextSubrun << std::endl;
+      std::cout << ">>> New Subrun found: " << std::endl;
       fCurrentSubrun++;
       fBaseFileName = foundNextSubrun;
+      fCumulativeEntries += fChain->GetEntries();
       LoadDataFile(foundNextSubrun, false);
       fDataPathEntry->SetText(gSystem->BaseName(fBaseFileName));
       fDataPathEntry->SetToolTipText(fBaseFileName);
 
     } else if (foundNextRun != "") {
-      std::cout << ">>> New Run detected: " << foundNextRun << std::endl;
+      std::cout << ">>> New Run detected: " << std::endl;
       ManualReset(); // Reset histograms for new main Run
       fCurrentRun += offset;
+      fCumulativeEntries = 0;
       fCurrentSubrun = 1;
       fBaseFileName = foundNextRun;
       LoadDataFile(foundNextRun);

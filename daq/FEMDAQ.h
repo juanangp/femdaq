@@ -93,6 +93,7 @@ protected:
   double runStartTime = 0;
   double runEndTime = 0;
   int fileIndex = 0;
+  int currentRun = -1;
   std::string baseFileName = "";
   std::string fileNameRoot = "";
   std::string execFile = "";

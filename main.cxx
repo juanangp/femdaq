@@ -3,6 +3,7 @@
 #include <csignal>
 
 #include <CLI/CLI.hpp>
+#include <readline/readline.h>
 
 void signalHandler(int sig) {
   std::cout << "\n[Signal] Caught signal " << sig << ". Shutting down..."
@@ -15,6 +16,7 @@ int main(int argc, char **argv) {
   std::string configFile = "";
   std::string execFile = "";
   bool readOnly = false;
+  bool tcm = false;
 
   CLI::App app{"fem-daq"};
 
@@ -22,6 +24,7 @@ int main(int argc, char **argv) {
       ->group("General");
   app.add_flag("--read-only", readOnly, ("Read-only mode"))->group("General");
   app.add_option("-e,--exec", execFile, "Executable file.")->group("General");
+  app.add_flag("--tcm", tcm, ("To send commands to TCM"))->group("General");
 
   CLI11_PARSE(app, argc, argv);
 
@@ -34,15 +37,32 @@ int main(int argc, char **argv) {
   std::signal(SIGINT, signalHandler);  // Ctrl+C
   std::signal(SIGTERM, signalHandler); // kill <pid>
 
-  RunConfig runConfig(configFile);
+  RunConfig runConfig(configFile, tcm);
 
   if (readOnly)
     runConfig.readOnly = true;
 
-  CommandFetcher cmdFetcher(runConfig);
+  rl_event_hook = []() -> int {
+    if (CommandFetcher::g_shutdown.load()) {
+      rl_done = 1;
+    }
+    return 0;
+  };
 
-  if (!execFile.empty())
-    cmdFetcher.execFile(execFile);
-  else
-    cmdFetcher.runInteractive();
+  try {
+    CommandFetcher cmdFetcher(runConfig);
+    if (!execFile.empty())
+      cmdFetcher.execFile(execFile);
+    else
+      cmdFetcher.runInteractive();
+
+  } catch (const std::runtime_error &e) {
+    std::cout << "\n[!] Execution aborted: " << e.what() << std::endl;
+  } catch (...) {
+    std::cout << "\n[!] An unexpected error occurred." << std::endl;
+  }
+
+  rl_event_hook = nullptr;
+
+  return 0;
 }

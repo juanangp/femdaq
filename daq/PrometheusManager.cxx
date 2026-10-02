@@ -1,9 +1,10 @@
 #include "PrometheusManager.h"
+#include <stdexcept>
 
 using namespace prometheus;
 
-PrometheusManager::PrometheusManager(const std::string &address)
-    : _exposer(address), _registry(std::make_shared<Registry>()),
+PrometheusManager::PrometheusManager()
+    : _registry(std::make_shared<Registry>()),
       // Initialization
       _runNumberGauge(BuildGauge()
                           .Name("run_number")
@@ -27,9 +28,16 @@ PrometheusManager::PrometheusManager(const std::string &address)
       _runNameFamily(BuildInfo()
                          .Name("run_filename")
                          .Help("Run Filename")
-                         .Register(*_registry)) {
-  // Register exposer via HTTP
-  _exposer.RegisterCollectable(_registry);
+                         .Register(*_registry)) {}
+
+void PrometheusManager::StartServer(const std::string &address) {
+  try {
+    _exposer = std::make_unique<Exposer>(address);
+    _exposer->RegisterCollectable(_registry);
+  } catch (const std::exception &e) {
+    _exposer = nullptr;
+    throw std::runtime_error("Prometheus Error: " + std::string(e.what()));
+  }
 }
 
 void PrometheusManager::setRunNumber(int num) { _runNumberGauge.Set(num); }

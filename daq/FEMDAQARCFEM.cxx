@@ -290,12 +290,8 @@ void FEMDAQARCFEM::PrintMonitoring(uint16_t *buff, const uint16_t &size,
 
 void FEMDAQARCFEM::EventBuilder() {
 
-  // Event counter assigned to an event without Start-Of-Event header
-  constexpr uint32_t kNoEvCount = 0xFFFFFFFF;
   // Max timestamp difference allowed between FEMs, in ticks of 10 ns
-  constexpr int64_t kTsTolerance = 100;
-  // Max number of counter-jump messages written per run
-  constexpr int kMaxJumpLogs = 100;
+  constexpr uint64_t kTsTolerance = 100;
 
   double lastTimeSaved = runStartTime;
   uint32_t ev_count = 0;
@@ -311,19 +307,8 @@ void FEMDAQARCFEM::EventBuilder() {
   eventBuffer.reserve(72 * 4 * 600);
   std::vector<uint16_t> localBuffer; // swapped with FEM.tmpBuffer
 
-  // Event counter and timestamp of the last event read from each FEM
-  std::vector<uint32_t> femEvCount(FEMArray.size(), kNoEvCount);
-  std::vector<uint64_t> femTs(FEMArray.size(), 0);
-
-  // Own counter continuity of each FEM (counter must increase by 1)
-  std::vector<bool> hasPrev(FEMArray.size(), false);
-  std::vector<uint32_t> prevEvCount(FEMArray.size(), 0);
-  std::vector<uint64_t> nJumps(FEMArray.size(), 0);
-  std::vector<uint64_t> nMissing(FEMArray.size(), 0);
-  int nJumpLogs = 0;
-
-  // Sync state between FEMs
-  bool inSync = true;
+  // Sync check between FEMs (the event counter is checked in FEMProxy)
+  bool lastTsOk = true;
   uint64_t nChecked = 0, nOutOfSync = 0;
 
   // Writes a sync message to stdout and to the log of every active FEM
@@ -341,14 +326,16 @@ void FEMDAQARCFEM::EventBuilder() {
     FEM.bufferIndex = 0;
     FEM.pendingEvent = true;
     FEM.buffer.clear();
+    FEM.evCounter.Reset();
   }
 
   while (!(emptyBuffer && stopEventBuilder)) {
     emptyBuffer = true;
     newEvent = true;
 
-    for (size_t i = 0; i < FEMArray.size(); i++) {
-      auto &FEM = FEMArray[i];
+    for (auto &FEM : FEMArray) {
+      if (!FEM.active) // Inactive FEMs never send data
+        continue;
 
       // Take the data received so far, the lock is only held for the swap
       FEM.mutex_mem.lock();
@@ -366,40 +353,10 @@ void FEMDAQARCFEM::EventBuilder() {
             FEM.buffer, FEM.bufferIndex, eventBuffer);
 
         if (!FEM.pendingEvent) {
-          ev_count = kNoEvCount; // Stays like this if there is no header
+          ev_count = FEMEventCounter::kNoEvCount; // Stays if there is no header
           packetAPI.ParseEventFromWords(eventBuffer, sEvent, ts, ev_count);
-          femEvCount[i] = ev_count;
-          femTs[i] = ts;
-
-          // Check the continuity of the counter of this FEM
-          if (ev_count != kNoEvCount) {
-            if (hasPrev[i]) {
-              const uint32_t delta = ev_count - prevEvCount[i];
-              if (delta != 1) {
-                ++nJumps[i];
-                std::ostringstream msg;
-                msg << "[SYNC] ERROR FEM " << FEM.femID << " at DAQ event "
-                    << storedEvents << ": event counter " << prevEvCount[i]
-                    << " -> " << ev_count;
-                if (delta > 1 && delta < 0x80000000) {
-                  nMissing[i] += delta - 1;
-                  msg << " (" << delta - 1 << " events missing)";
-                } else if (delta == 0) {
-                  msg << " (repeated event)";
-                } else {
-                  msg << " (counter went backwards)";
-                }
-                if (nJumpLogs < kMaxJumpLogs) {
-                  logSync(msg.str());
-                  if (++nJumpLogs == kMaxJumpLogs)
-                    logSync("[SYNC] too many counter jumps, further messages "
-                            "suppressed (see final summary)");
-                }
-              }
-            }
-            hasPrev[i] = true;
-            prevEvCount[i] = ev_count;
-          }
+          FEM.evCounter.count = ev_count;
+          FEM.evCounter.ts = ts;
         }
       }
       newEvent &= !FEM.pendingEvent; // Check if the event is pending
@@ -407,40 +364,56 @@ void FEMDAQARCFEM::EventBuilder() {
     }
 
     if (newEvent) { // Save Event if closed
-      sEvent.eventID = ev_count;
-      sEvent.timestamp = (double)ts * 1.E-8 + runStartTime;
 
-      // Check that all the active FEMs have read the same event
-      bool evInSync = true;
-      int ref = -1;
-      for (size_t i = 0; i < FEMArray.size(); i++) {
-        if (!FEMArray[i].active)
+      // Check the sync of the FEMs: event counter and timestamp
+      bool inSync = true, changed = false;
+      uint64_t tsMin = UINT64_MAX, tsMax = 0;
+      for (auto &FEM : FEMArray) {
+        if (!FEM.active)
           continue;
-        if (ref < 0)
-          ref = i;
-        else if (femEvCount[i] != femEvCount[ref] ||
-                 std::llabs((int64_t)femTs[i] - (int64_t)femTs[ref]) >
-                     kTsTolerance)
-          evInSync = false;
+        auto &c = FEM.evCounter;
+        c.Check(nChecked);
+        tsMin = std::min(tsMin, c.ts);
+        tsMax = std::max(tsMax, c.ts);
+        inSync &= (c.offset == 0);
+        changed |= (c.offset != c.lastOffset);
       }
+      const bool tsOk = (tsMax < tsMin) || (tsMax - tsMin <= kTsTolerance);
+      inSync &= tsOk;
+      changed |= (tsOk != lastTsOk);
+
       ++nChecked;
-      if (!evInSync)
+      if (!inSync)
         ++nOutOfSync;
 
       // Log only when the sync state changes, not on every event
-      if (evInSync != inSync) {
+      if (changed) {
         std::ostringstream msg;
         msg << "[SYNC] "
-            << (evInSync ? "FEMs back in sync" : "ERROR FEMs out of sync")
+            << (inSync ? "FEMs back in sync" : "ERROR FEMs out of sync")
             << " at DAQ event " << storedEvents << " (" << nOutOfSync
             << " events out of sync so far)";
-        for (size_t i = 0; i < FEMArray.size(); i++)
-          if (FEMArray[i].active)
-            msg << " | FEM " << FEMArray[i].femID << " cnt=" << femEvCount[i]
-                << " ts=" << femTs[i];
+        for (auto &FEM : FEMArray) {
+          if (!FEM.active)
+            continue;
+          auto &c = FEM.evCounter;
+          msg << " | FEM " << FEM.femID << " counter offset ";
+          if (c.offset == FEMEventCounter::kNoHeader)
+            msg << "no header";
+          else
+            msg << std::showpos << c.offset << std::noshowpos;
+          msg << " ts +" << c.ts - tsMin;
+          c.lastOffset = c.offset;
+        }
         logSync(msg.str());
-        inSync = evInSync;
+        lastTsOk = tsOk;
       }
+
+      // The event ID is the number of events stored, the time is the
+      // smallest of the FEMs (they only differ if they are out of sync)
+      sEvent.eventID = storedEvents;
+      sEvent.timestamp =
+          (double)((tsMax >= tsMin) ? tsMin : 0) * 1.E-8 + runStartTime;
 
       if (storedEvents == 0) {
         if (runConfig.verboseLevel >= RunConfig::Verbosity::Info)
@@ -511,10 +484,10 @@ void FEMDAQARCFEM::EventBuilder() {
           << " events in sync";
   if (nOutOfSync)
     summary << ", " << nOutOfSync << " POSSIBLY OUT OF SYNC";
-  for (size_t i = 0; i < FEMArray.size(); i++)
-    if (FEMArray[i].active)
-      summary << " | FEM " << FEMArray[i].femID << ": " << nJumps[i]
-              << " counter jumps, " << nMissing[i] << " events missing";
+  for (auto &FEM : FEMArray)
+    if (FEM.active)
+      summary << " | FEM " << FEM.femID << ": " << FEM.evCounter.nBad
+              << " events with counter offset";
   logSync(summary.str());
 
   std::cout << "End of event builder " << GetTimeStampFromUnixTime(runEndTime)

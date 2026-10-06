@@ -1,8 +1,11 @@
 #pragma once
 
+#include <atomic>
+#include <cstdint>
 #include <deque>
 #include <mutex>
 #include <string>
+#include <vector>
 
 #include "FEMSocket.h"
 
@@ -19,6 +22,8 @@ public:
     active = other.active;
     femID = other.femID;
     bufferIndex = other.bufferIndex;
+    evCount = other.evCount;
+    evTs = other.evTs;
     buffer = std::move(other.buffer);
     tmpBuffer = std::move(other.tmpBuffer);
     cmd_sent.store(other.cmd_sent.load());
@@ -33,6 +38,8 @@ public:
       active = other.active;
       femID = other.femID;
       bufferIndex = other.bufferIndex;
+      evCount = other.evCount;
+      evTs = other.evTs;
       buffer = std::move(other.buffer);
       tmpBuffer = std::move(other.tmpBuffer);
 
@@ -51,6 +58,12 @@ public:
   std::atomic<uint32_t> daq_credit{0};
   int femID = 0;
   size_t bufferIndex = 0;
+
+  // Event counter of an event without Start-Of-Event header
+  static constexpr uint32_t kNoEvCount = 0xFFFFFFFF;
+  // Event counter and timestamp (ticks of 10 ns) of the last event read
+  uint32_t evCount = kNoEvCount;
+  uint64_t evTs = 0;
 
   std::vector<uint16_t> tmpBuffer;
   std::deque<uint16_t> buffer;

@@ -60,8 +60,8 @@ FEMDAQARCFEM::~FEMDAQARCFEM() {
 void FEMDAQARCFEM::SendDAQCmdThread(FEMProxy &FEM) {
 
   char daq_cmd[40];
-  FEM.tmpBuffer.clear();
-  FEM.daq_credit = 0;
+  //  FEM.tmpBuffer.clear();
+  //  FEM.daq_credit = 0;
   const uint32_t reqFrames = 272 * 20;
   uint8_t seq = 0x00;
   const uint32_t frameThr = 272;
@@ -200,6 +200,14 @@ void FEMDAQARCFEM::FEMReceiverThread(FEMProxy &FEM) {
 
 void FEMDAQARCFEM::startDAQ(const std::vector<std::string> &flags) {
 
+  // Reset the receiver state before the builder starts and "daq" is sent
+  for (auto &FEM : FEMArray) {
+    FEM.mutex_mem.lock();
+    FEM.tmpBuffer.clear();
+    FEM.mutex_mem.unlock();
+    FEM.daq_credit = 0;
+  }
+
   stopEventBuilder = false;
   stopRun = false;
   storedEvents = 0;
@@ -282,6 +290,10 @@ void FEMDAQARCFEM::PrintMonitoring(uint16_t *buff, const uint16_t &size,
 
 void FEMDAQARCFEM::EventBuilder() {
 
+  // Max timestamp difference allowed between FEMs, in ticks of 10 ns
+  constexpr uint64_t kTsTolerance = 100;
+  auto tsDiff = [](uint64_t a, uint64_t b) { return a > b ? a - b : b - a; };
+
   double lastTimeSaved = runStartTime;
   uint32_t ev_count = 0;
   uint64_t ts = 0x0;
@@ -294,6 +306,21 @@ void FEMDAQARCFEM::EventBuilder() {
   int tC = 0;
   std::vector<uint16_t> eventBuffer;
   eventBuffer.reserve(72 * 4 * 600);
+  std::vector<uint16_t> localBuffer; // swapped with FEM.tmpBuffer
+
+  // Sync check between FEMs: all of them must read the same event
+  bool lastInSync = true;
+  uint64_t nChecked = 0, nOutOfSync = 0;
+
+  // Writes a sync message to stdout and to the log of every active FEM
+  auto logSync = [&](const std::string &msg) {
+    std::cout << msg << std::endl;
+    for (auto &FEM : FEMArray)
+      if (FEM.active && FEM.logFile) {
+        fprintf(FEM.logFile, "%s\n", msg.c_str());
+        fflush(FEM.logFile);
+      }
+  };
 
   // Initialize FEMs
   for (auto &FEM : FEMArray) {
@@ -307,32 +334,95 @@ void FEMDAQARCFEM::EventBuilder() {
     newEvent = true;
 
     for (auto &FEM : FEMArray) {
+      if (!FEM.active) // Inactive FEMs never send data
+        continue;
+
+      // Take the data received so far, the lock is only held for the swap
       FEM.mutex_mem.lock();
-      if (!FEM.tmpBuffer.empty()) {
-        // Data is moved from tmp buffer to avoid lock
-        FEM.buffer.insert(FEM.buffer.end(),
-                          std::make_move_iterator(FEM.tmpBuffer.begin()),
-                          std::make_move_iterator(FEM.tmpBuffer.end()));
-        FEM.tmpBuffer.clear();
-      }
+      localBuffer.swap(FEM.tmpBuffer);
       FEM.mutex_mem.unlock();
+
+      FEM.buffer.insert(FEM.buffer.end(), localBuffer.begin(),
+                        localBuffer.end());
+      localBuffer.clear();
 
       emptyBuffer &= FEM.buffer.empty();
 
       if (!FEM.buffer.empty() && FEM.pendingEvent) {
         FEM.pendingEvent = !packetAPI.TryExtractNextEvent(
             FEM.buffer, FEM.bufferIndex, eventBuffer);
-      }
 
-      if (!FEM.pendingEvent)
-        packetAPI.ParseEventFromWords(eventBuffer, sEvent, ts, ev_count);
+        if (!FEM.pendingEvent) {
+          ev_count = FEMProxy::kNoEvCount; // Stays if there is no header
+          packetAPI.ParseEventFromWords(eventBuffer, sEvent, ts, ev_count);
+          FEM.evCount = ev_count;
+          FEM.evTs = ts;
+        }
+      }
       newEvent &= !FEM.pendingEvent; // Check if the event is pending
       eventBuffer.clear();
     }
 
     if (newEvent) { // Save Event if closed
-      sEvent.eventID = ev_count;
-      sEvent.timestamp = (double)ts * 1.E-8 + runStartTime;
+
+      // Check the sync of the FEMs: the events must have the same time.
+      // The reference is the FEM whose time agrees with most of the FEMs
+      const FEMProxy *ref = nullptr;
+      int nActive = 0, bestVotes = 0;
+      for (const auto &FEM : FEMArray) {
+        if (!FEM.active)
+          continue;
+        ++nActive;
+        if (FEM.evCount == FEMProxy::kNoEvCount) // Event without header
+          continue;
+        int votes = 0;
+        for (const auto &other : FEMArray)
+          if (other.active && other.evCount != FEMProxy::kNoEvCount &&
+              tsDiff(other.evTs, FEM.evTs) <= kTsTolerance)
+            ++votes;
+        if (votes > bestVotes) {
+          bestVotes = votes;
+          ref = &FEM;
+        }
+      }
+      const bool inSync = (bestVotes == nActive);
+      const bool hasMajority = (bestVotes * 2 > nActive);
+
+      ++nChecked;
+      if (!inSync)
+        ++nOutOfSync;
+
+      // Log only when the sync state changes, not on every event
+      if (inSync != lastInSync) {
+        std::ostringstream msg;
+        msg << "[SYNC] "
+            << (inSync ? "FEMs back in sync" : "ERROR FEMs out of sync")
+            << " at DAQ event " << storedEvents << " (" << nOutOfSync
+            << " events out of sync so far)";
+        if (!inSync && !hasMajority)
+          msg << " [no majority, event ID and time not reliable]";
+        for (const auto &FEM : FEMArray) {
+          if (!FEM.active)
+            continue;
+          msg << " | FEM " << FEM.femID << " cnt=";
+          if (FEM.evCount == FEMProxy::kNoEvCount)
+            msg << "no header";
+          else
+            msg << FEM.evCount << " ts=" << FEM.evTs;
+          if (ref && FEM.evCount != FEMProxy::kNoEvCount)
+            msg << " (" << std::showpos
+                << (int64_t)FEM.evTs - (int64_t)ref->evTs << std::noshowpos
+                << ")";
+        }
+        logSync(msg.str());
+        lastInSync = inSync;
+      }
+
+      // The event ID and the time are the ones of the majority of the FEMs.
+      // Without majority the ID is the number of events stored
+      sEvent.eventID =
+          hasMajority ? ref->evCount : static_cast<uint32_t>(storedEvents);
+      sEvent.timestamp = (double)(ref ? ref->evTs : 0) * 1.E-8 + runStartTime;
 
       if (storedEvents == 0) {
         if (runConfig.verboseLevel >= RunConfig::Verbosity::Info)
@@ -343,6 +433,16 @@ void FEMDAQARCFEM::EventBuilder() {
       }
 
       if (fileRoot && !sEvent.signalsID.empty()) {
+        // Event counter and timestamp read from each active FEM
+        // (sEvent.Clear() below empties them after the event is stored)
+        for (const auto &FEM : FEMArray) {
+          if (!FEM.active)
+            continue;
+          sEvent.femID.push_back(FEM.femID);
+          sEvent.femEventCount.push_back(FEM.evCount);
+          sEvent.femTimestamp.push_back(FEM.evTs);
+        }
+
         FillTree(sEvent.timestamp, lastTimeSaved);
 
         if (storedEvents % 100 == 0) {
@@ -396,6 +496,14 @@ void FEMDAQARCFEM::EventBuilder() {
 
     WriteRunEndTime(runEndTime);
   }
+
+  // Sync summary of the run
+  std::ostringstream summary;
+  summary << "[SYNC] " << nChecked - nOutOfSync << " of " << nChecked
+          << " events in sync";
+  if (nOutOfSync)
+    summary << ", " << nOutOfSync << " POSSIBLY OUT OF SYNC";
+  logSync(summary.str());
 
   std::cout << "End of event builder " << GetTimeStampFromUnixTime(runEndTime)
             << " " << storedEvents << " events acquired in "

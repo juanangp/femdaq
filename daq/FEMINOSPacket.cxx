@@ -339,6 +339,11 @@ bool TryExtractNextEvent(std::deque<uint16_t> &buffer, size_t &idx,
       pos += 2;
       endOfEvent = true;
       break;
+    } else if (w == PFX_FRAME_LOSS_MARKER) {
+      // Frames were lost here, the event in progress is closed as incomplete
+      pos += 1;
+      endOfEvent = true;
+      break;
     } else if ((w & PFX_0_BIT_CONTENT_MASK) == PFX_END_OF_FRAME) {
     } else if (w == PFX_NULL_CONTENT) {
     } else {
@@ -364,6 +369,49 @@ bool TryExtractNextEvent(std::deque<uint16_t> &buffer, size_t &idx,
   idx = 0;
 
   return true;
+}
+
+// Scans an event given by TryExtractNextEvent, stepping over the words as it
+// does. Returns the number of Start Of Event headers found, sofPos, tS and
+// ev_count are the ones of the last header. lostFrames is set if the event
+// contains PFX_FRAME_LOSS_MARKER
+int GetEventHeader(const std::vector<uint16_t> &event, size_t &sofPos,
+                   uint64_t &tS, uint32_t &ev_count, bool &lostFrames) {
+
+  int nHeaders = 0;
+  lostFrames = false;
+  size_t idx = 0;
+  const size_t buffSize = event.size();
+
+  while (idx < buffSize) {
+    const uint16_t w = event[idx];
+    size_t step = 1;
+    if ((w & PFX_12_BIT_CONTENT_MASK) == PFX_ADC_SAMPLE ||
+        (w & PFX_9_BIT_CONTENT_MASK) == PFX_TIME_BIN_IX) {
+    } else if ((w & PFX_9_BIT_CONTENT_MASK) == PFX_START_OF_DFRAME) {
+      step = 2;
+    } else if ((w & PFX_9_BIT_CONTENT_MASK) == PFX_START_OF_MFRAME) {
+      step = 2;
+    } else if (w == PFX_PEDESTAL_H_MD) {
+      step = 5;
+    } else if ((w & PFX_4_BIT_CONTENT_MASK) == PFX_START_OF_EVENT) {
+      if (idx + 5 < buffSize) {
+        sofPos = idx;
+        tS = (uint64_t)event[idx + 1] | ((uint64_t)event[idx + 2] << 16) |
+             ((uint64_t)event[idx + 3] << 32);
+        ev_count = (uint32_t)event[idx + 4] | ((uint32_t)event[idx + 5] << 16);
+        nHeaders++;
+      }
+      step = 6;
+    } else if ((w & PFX_4_BIT_CONTENT_MASK) == PFX_END_OF_EVENT) {
+      break;
+    } else if (w == PFX_FRAME_LOSS_MARKER) {
+      lostFrames = true;
+    }
+    idx += step;
+  }
+
+  return nHeaders;
 }
 
 void ParseEventFromWords(std::vector<uint16_t> &event, SignalEvent &sEvent,

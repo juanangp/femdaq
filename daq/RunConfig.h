@@ -32,6 +32,14 @@ public:
   bool readOnly = false;
   bool isTCM = false;
 
+  // DAQ flow control (ARC/FEMINOS): frames a FEM may send before new credits
+  // are received, and frames received before new credits are requested
+  int daqCredits = 0;
+  int daqCreditThreshold = 0;
+  // Build events matching the FEM timestamps, a FEM whose event is missing
+  // is left out of that event instead of shifting all the next ones
+  bool resync = true;
+
   std::map<std::string, std::string> runInfo;
 
   uint64_t fileSize = 1024ull * 1024ull * 1024ull;

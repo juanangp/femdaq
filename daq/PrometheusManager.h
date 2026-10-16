@@ -16,6 +16,8 @@ public:
   void setRunNumber(int num);
   void setRate(double rate);
   void setEvents(int count);
+  void setLostFrames(int femID, double count);
+  void setPartialEvents(double count);
   void setMetadata(const std::string &name);
   void setRunName(const std::string &name);
 
@@ -28,6 +30,8 @@ private:
   prometheus::Gauge &_runNumberGauge;
   prometheus::Gauge &_rateGauge;
   prometheus::Gauge &_eventsGauge;
+  prometheus::Family<prometheus::Gauge> &_lostFramesFamily;
+  prometheus::Gauge &_partialEventsGauge;
 
   prometheus::Family<prometheus::Info> &_infoFamily;
   prometheus::Family<prometheus::Info> &_runNameFamily;

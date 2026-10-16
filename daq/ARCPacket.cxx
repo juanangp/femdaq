@@ -447,6 +447,49 @@ bool TryExtractNextEvent(std::deque<uint16_t> &buffer, size_t &idx,
   return true;
 }
 
+// Scans an event given by TryExtractNextEvent, stepping over the words as it
+// does. Returns the number of Start Of Event headers found, sofPos, tS and
+// ev_count are the ones of the last header. Frame losses are not checked for
+// ARC, lostFrames is always false
+int GetEventHeader(const std::vector<uint16_t> &event, size_t &sofPos,
+                   uint64_t &tS, uint32_t &ev_count, bool &lostFrames) {
+
+  int nHeaders = 0;
+  lostFrames = false;
+  size_t idx = 0;
+  const size_t buffSize = event.size();
+
+  while (idx < buffSize) {
+    const uint16_t w = event[idx];
+    size_t step = 1;
+    if ((w & PFX_12_BIT_CONTENT_MASK) == PFX_ADC_SAMPLE ||
+        (w & PFX_9_BIT_CONTENT_MASK) == PFX_TIME_BIN_IX) {
+    } else if ((w & PFX_9_BIT_CONTENT_MASK) == PFX_START_OF_DFRAME) {
+      step = 2;
+    } else if ((w & PFX_9_BIT_CONTENT_MASK) == PFX_START_OF_MFRAME) {
+      step = 2;
+    } else if ((w & PFX_0_BIT_CONTENT_MASK) == PFX_EXTD_CARD_CHIP_CHAN_H_MD) {
+      step = 6;
+    } else if ((w & PFX_8_BIT_CONTENT_MASK) == PFX_START_OF_EVENT_ARC) {
+      if (idx + 5 < buffSize) {
+        sofPos = idx;
+        tS = (uint64_t)event[idx + 1] | ((uint64_t)event[idx + 2] << 16) |
+             ((uint64_t)event[idx + 3] << 32);
+        ev_count = (uint32_t)event[idx + 4] | ((uint32_t)event[idx + 5] << 16);
+        nHeaders++;
+      }
+      step = 6;
+    } else if ((w & PFX_0_BIT_CONTENT_MASK) == PFX_EXTD_CARD_CHIP_CHAN_HIT_IX) {
+      step = 2;
+    } else if ((w & PFX_6_BIT_CONTENT_MASK) == PFX_END_OF_EVENT_ARC) {
+      break;
+    }
+    idx += step;
+  }
+
+  return nHeaders;
+}
+
 void ParseEventFromWords(std::vector<uint16_t> &event, SignalEvent &sEvent,
                          uint64_t &tS, uint32_t &ev_count) {
 

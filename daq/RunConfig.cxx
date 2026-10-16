@@ -63,6 +63,22 @@ void RunConfig::loadConfig() {
   if (updateRateTime <= 0)
     updateRateTime = 1;
 
+  if (electronics == "FEMINOS" || electronics == "ARC") {
+    // FEMINOS defaults as mclient ("credits restore 8 1 F"): few frames in
+    // flight, so the switch and socket buffers cannot overflow. ARC keeps the
+    // previous femdaq values
+    const bool isFeminos = (electronics == "FEMINOS");
+    daqCredits = getOrDefault(run, "daqCredits", isFeminos ? 8 : 272 * 20);
+    daqCreditThreshold =
+        getOrDefault(run, "daqCreditThreshold", isFeminos ? 1 : 272);
+    if (daqCredits < 1 || daqCredits > 0xFFFFFE)
+      throw std::runtime_error("run.daqCredits must be between 1 and 0xFFFFFE");
+    if (daqCreditThreshold < 1 || daqCreditThreshold > daqCredits)
+      throw std::runtime_error(
+          "run.daqCreditThreshold must be between 1 and run.daqCredits");
+    resync = getOrDefault(run, "resync", resync);
+  }
+
   // FEM array
   if (run["FEM"]) {
     for (const auto &node : run["FEM"]) {

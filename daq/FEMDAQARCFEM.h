@@ -11,6 +11,8 @@ public:
                                 std::vector<uint16_t> &);
     void (*ParseEventFromWords)(std::vector<uint16_t> &, SignalEvent &,
                                 uint64_t &, uint32_t &);
+    int (*GetEventHeader)(const std::vector<uint16_t> &, size_t &, uint64_t &,
+                          uint32_t &, bool &);
     void (*DataPacket_Print)(uint16_t *, const uint16_t &, FILE *);
     void (*ConfigPacket_Print)(uint16_t *, const uint16_t &, FILE *);
   };
@@ -32,6 +34,7 @@ public:
   void SendCommand(const char *cmd, FEMProxy &FEM, bool wait = true);
   void waitForCmd(FEMProxy &FEM);
   void SendDAQCmdThread(FEMProxy &FEM);
+  uint32_t CheckFrameSeq(FEMProxy &FEM, uint16_t seqWord);
 
   void PrintMonitoring(uint16_t *buff, const uint16_t &size, FEMProxy &FEM);
 

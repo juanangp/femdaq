@@ -62,15 +62,17 @@ void FEMDAQARCFEM::SendDAQCmdThread(FEMProxy &FEM) {
   char daq_cmd[40];
   //  FEM.tmpBuffer.clear();
   //  FEM.daq_credit = 0;
-  const uint32_t reqFrames = 272 * 20;
+  // Frames the FEM may send without waiting for a new request. A smaller
+  // value limits the burst that the ethernet buffer of the FEM has to absorb
+  const uint32_t reqFrames = 44;
+  const uint32_t frameThr = 11;
   uint8_t seq = 0x00;
-  const uint32_t frameThr = 272;
   // First daq request, do not add sequence number
   sprintf(daq_cmd, "daq 0x%06x F\n", reqFrames);
   SendCommand(daq_cmd, FEM, false);
 
   while (!abrt && !stopRun) {
-    if (FEM.daq_credit >= frameThr) {
+    while (FEM.daq_credit >= frameThr) { // send all the pending requests
       if (runConfig.verboseLevel >= RunConfig::Verbosity::Debug)
         std::cout << "FEM " << FEM.femID << " Daq frames credits "
                   << FEM.daq_credit << " left " << reqFrames - FEM.daq_credit
@@ -154,6 +156,13 @@ void FEMDAQARCFEM::FEMReceiverThread(FEMProxy &FEM) {
   uint16_t buf_rcv[8192 / sizeof(uint16_t)];
   const size_t offset = (runConfig.electronics == "FEMINOS") ? 1 : 0;
 
+  // Sequence number of the data frames (FEMINOS only). The first frame after
+  // a "daq" without sequence number has 0x0100, the next ones 0x0001, 0x0002...
+  // (8 bits, it wraps around). A jump means that frames were lost
+  bool seqEnabled = false;
+  uint8_t seqExpected = 0;
+  int nLostMsgs = 0;
+
   while (!stopReceiver) {
 
     int length = recvfrom(FEM.client, buf_rcv, 8192, 0,
@@ -180,6 +189,34 @@ void FEMDAQARCFEM::FEMReceiverThread(FEMProxy &FEM) {
     // }
 
     if (packetAPI.isDataFrame(&buf_rcv[1])) {
+      if (offset) {                 // FEMINOS
+        if (buf_rcv[0] == 0x0100) { // Start of the sequence
+          seqEnabled = true;
+          seqExpected = 1;
+          nLostMsgs = 0;
+          FEM.framesLost = 0;
+        } else if (seqEnabled && (buf_rcv[0] >> 8) == 0) {
+          const uint8_t seq = buf_rcv[0] & 0xFF;
+          const uint8_t lost = seq - seqExpected; // Modulo 256
+          if (lost) {
+            FEM.framesLost += lost;
+            if (nLostMsgs++ < 100) {
+              const std::string msg =
+                  "[SYNC] " + GetTimeStampFromUnixTime(getCurrentTime()) +
+                  " FEM " + std::to_string(FEM.femID) + ": " +
+                  std::to_string(lost) + " frame(s) lost (sequence " +
+                  std::to_string(seqExpected) + " expected, " +
+                  std::to_string(seq) + " received)";
+              std::cout << msg << std::endl;
+              if (FEM.logFile) {
+                fprintf(FEM.logFile, "%s\n", msg.c_str());
+                fflush(FEM.logFile);
+              }
+            }
+          }
+          seqExpected = seq + 1;
+        }
+      }
       // const std::deque<uint16_t> frame (&buf_rcv[1], &buf_rcv[size -1]);
       FEM.daq_credit++;
       FEM.mutex_mem.lock();
@@ -504,6 +541,10 @@ void FEMDAQARCFEM::EventBuilder() {
   if (nOutOfSync)
     summary << ", " << nOutOfSync << " POSSIBLY OUT OF SYNC";
   logSync(summary.str());
+  for (auto &FEM : FEMArray)
+    if (FEM.active)
+      summary << " | FEM " << FEM.femID << ": " << FEM.framesLost
+              << " frames lost";
 
   std::cout << "End of event builder " << GetTimeStampFromUnixTime(runEndTime)
             << " " << storedEvents << " events acquired in "

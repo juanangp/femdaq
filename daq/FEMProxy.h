@@ -29,6 +29,7 @@ public:
     cmd_sent.store(other.cmd_sent.load());
     cmd_rcv.store(other.cmd_rcv.load());
     daq_credit.store(other.daq_credit.load());
+    framesLost.store(other.framesLost.load());
   }
 
   FEMProxy &operator=(FEMProxy &&other) noexcept {
@@ -46,6 +47,7 @@ public:
       cmd_sent.store(other.cmd_sent.load());
       cmd_rcv.store(other.cmd_rcv.load());
       daq_credit.store(other.daq_credit.load());
+      framesLost.store(other.framesLost.load());
     }
     return *this;
   }
@@ -56,6 +58,7 @@ public:
   std::atomic<uint32_t> cmd_sent{0};
   std::atomic<uint32_t> cmd_rcv{0};
   std::atomic<uint32_t> daq_credit{0};
+  std::atomic<uint64_t> framesLost{0};
   int femID = 0;
   size_t bufferIndex = 0;
 

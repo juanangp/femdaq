@@ -31,6 +31,7 @@ public:
   virtual void CreditsRestore(uint32_t reqFrames, uint32_t frameThr) override {
     kReqFrames = reqFrames;
     kFrameThr = frameThr;
+    CreditsShow();
   }
 
   virtual void CreditsShow() override;

@@ -26,11 +26,11 @@ public:
   // Lost frames that trigger a resync of the credits
   uint8_t kLostThr = 1;
 
-  virtual void CreditsRestore() override { CreditsRestore(2, 8); }
+  virtual void CreditsRestore() override { CreditsRestore(8, 2); }
 
-  virtual void CreditsRestore(uint32_t frameThr, uint32_t reqFrames) override {
-    kFrameThr = frameThr;
+  virtual void CreditsRestore(uint32_t reqFrames, uint32_t frameThr) override {
     kReqFrames = reqFrames;
+    kFrameThr = frameThr;
   }
 
   virtual void CreditsShow() override;

@@ -66,7 +66,7 @@ public:
               << std::endl;
   }
 
-  virtual void CreditsRestore(uint32_t frameThr, uint32_t reqFrames) {
+  virtual void CreditsRestore(uint32_t reqFrames, uint32_t frameThr) {
     std::cout << "WARNING credits restore not implemented in this electronics"
               << std::endl;
   }

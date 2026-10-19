@@ -405,6 +405,7 @@ void FEMDAQ::UpdateThread() {
     const double rate = (evCount - prevEvCount) / elapsed;
 
     prometheus.setEvents(evCount);
+    prometheus.setDesyncEvents(nOutOfSync);
     prometheus.setRate(rate);
 
     if (runConfig.verboseLevel >= RunConfig::Verbosity::Info &&

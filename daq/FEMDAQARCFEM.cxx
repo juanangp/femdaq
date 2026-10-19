@@ -347,7 +347,8 @@ void FEMDAQARCFEM::EventBuilder() {
 
   // Sync check between FEMs: all of them must read the same event
   bool lastInSync = true;
-  uint64_t nChecked = 0, nOutOfSync = 0;
+  uint64_t nChecked = 0;
+  nOutOfSync = 0;
 
   // Writes a sync message to stdout and to the log of every active FEM
   auto logSync = [&](const std::string &msg) {

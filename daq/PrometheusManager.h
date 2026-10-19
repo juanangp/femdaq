@@ -16,6 +16,7 @@ public:
   void setRunNumber(int num);
   void setRate(double rate);
   void setEvents(int count);
+  void setDesyncEvents(int count);
   void setMetadata(const std::string &name);
   void setRunName(const std::string &name);
 
@@ -28,6 +29,7 @@ private:
   prometheus::Gauge &_runNumberGauge;
   prometheus::Gauge &_rateGauge;
   prometheus::Gauge &_eventsGauge;
+  prometheus::Gauge &_desyncEventsGauge;
 
   prometheus::Family<prometheus::Info> &_infoFamily;
   prometheus::Family<prometheus::Info> &_runNameFamily;

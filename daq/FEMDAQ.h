@@ -98,6 +98,7 @@ protected:
   std::string fileNameRoot = "";
   std::string execFile = "";
   SignalEvent sEvent;
+  int nOutOfSync = 0;
 
   PrometheusManager prometheus;
 

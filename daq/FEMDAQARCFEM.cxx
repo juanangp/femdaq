@@ -139,12 +139,19 @@ void FEMDAQARCFEM::SendCommand(const char *cmd, FEMProxy &FEM, bool wait) {
 }
 
 void FEMDAQARCFEM::CreditsShow() {
+  char configBuffer[128];
+  std::snprintf(configBuffer, sizeof(configBuffer),
+                " credits: reqFrames %u | framesThr %u", kReqFrames, kFrameThr);
+  std::cout << "<< " << configBuffer << std::endl;
 
   for (auto &FEM : FEMArray) {
     if (FEM.active && FEM.logFile) {
-      fprintf(FEM.logFile, ">> FEM %u frameThr %u reqFrames %u\n", FEM.femID,
-              kFrameThr, kReqFrames);
-      fflush(FEM.logFile);
+      char femBuffer[256];
+      std::snprintf(femBuffer, sizeof(femBuffer), "<< FEM ID %u %s", FEM.femID,
+                    configBuffer);
+      std::string msg(femBuffer);
+      std::fprintf(FEM.logFile, "%s\n", msg.c_str());
+      std::fflush(FEM.logFile);
     }
   }
 }

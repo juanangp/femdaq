@@ -60,17 +60,26 @@ FEMDAQARCFEM::~FEMDAQARCFEM() {
 void FEMDAQARCFEM::SendDAQCmdThread(FEMProxy &FEM) {
 
   char daq_cmd[40];
-  FEM.tmpBuffer.clear();
-  FEM.daq_credit = 0;
-  const uint32_t reqFrames = 272 * 20;
+  //  FEM.tmpBuffer.clear();
+  //  FEM.daq_credit = 0;
+  // Frames the FEM may send without waiting for a new request. A smaller
+  // value limits the burst that the ethernet buffer of the FEM has to absorb
+  const uint32_t reqFrames = kReqFrames;
+  const uint32_t frameThr = kFrameThr;
   uint8_t seq = 0x00;
-  const uint32_t frameThr = 272;
   // First daq request, do not add sequence number
   sprintf(daq_cmd, "daq 0x%06x F\n", reqFrames);
   SendCommand(daq_cmd, FEM, false);
 
   while (!abrt && !stopRun) {
-    if (FEM.daq_credit >= frameThr) {
+    {
+      // The receiver thread notifies every frame, the timeout only bounds the
+      // delay of a missed notification and of abrt/stopRun
+      std::unique_lock<std::mutex> lk(FEM.credit_m);
+      FEM.credit_cv.wait_for(lk, std::chrono::milliseconds(1),
+                             [&] { return FEM.daq_credit >= frameThr; });
+    }
+    while (FEM.daq_credit >= frameThr) { // send all the pending requests
       if (runConfig.verboseLevel >= RunConfig::Verbosity::Debug)
         std::cout << "FEM " << FEM.femID << " Daq frames credits "
                   << FEM.daq_credit << " left " << reqFrames - FEM.daq_credit
@@ -80,7 +89,6 @@ void FEMDAQARCFEM::SendDAQCmdThread(FEMProxy &FEM) {
       FEM.daq_credit -= frameThr;
       seq++;
     }
-    std::this_thread::sleep_for(std::chrono::milliseconds(1));
   }
 
   SendCommand("daq 0x000000 F\n", FEM, false);
@@ -130,6 +138,24 @@ void FEMDAQARCFEM::SendCommand(const char *cmd, FEMProxy &FEM, bool wait) {
   waitForCmd(FEM);
 }
 
+void FEMDAQARCFEM::CreditsShow() {
+  char configBuffer[128];
+  std::snprintf(configBuffer, sizeof(configBuffer),
+                " credits: reqFrames %u | framesThr %u", kReqFrames, kFrameThr);
+  std::cout << ">> " << configBuffer << std::endl;
+
+  for (auto &FEM : FEMArray) {
+    if (FEM.active && FEM.logFile) {
+      char femBuffer[256];
+      std::snprintf(femBuffer, sizeof(femBuffer), ">> FEM ID %u %s", FEM.femID,
+                    configBuffer);
+      std::string msg(femBuffer);
+      std::fprintf(FEM.logFile, "%s\n", msg.c_str());
+      std::fflush(FEM.logFile);
+    }
+  }
+}
+
 void FEMDAQARCFEM::waitForCmd(FEMProxy &FEM) {
 
   auto start = std::chrono::steady_clock::now();
@@ -153,6 +179,13 @@ void FEMDAQARCFEM::FEMReceiverThread(FEMProxy &FEM) {
 
   uint16_t buf_rcv[8192 / sizeof(uint16_t)];
   const size_t offset = (runConfig.electronics == "FEMINOS") ? 1 : 0;
+
+  // Sequence number of the data frames (FEMINOS only). The first frame after
+  // a "daq" without sequence number has 0x0100, the next ones 0x0001, 0x0002...
+  // (8 bits, it wraps around). A jump means that frames were lost
+  bool seqEnabled = false;
+  uint8_t seqExpected = 0;
+  int nLostMsgs = 0;
 
   while (!stopReceiver) {
 
@@ -180,12 +213,44 @@ void FEMDAQARCFEM::FEMReceiverThread(FEMProxy &FEM) {
     // }
 
     if (packetAPI.isDataFrame(&buf_rcv[1])) {
+      if (offset) {                 // FEMINOS
+        if (buf_rcv[0] == 0x0100) { // Start of the sequence
+          seqEnabled = true;
+          seqExpected = 1;
+          nLostMsgs = 0;
+          FEM.framesLost = 0;
+        } else if (seqEnabled && (buf_rcv[0] >> 8) == 0) {
+          const uint8_t seq = buf_rcv[0] & 0xFF;
+          const uint8_t lost = seq - seqExpected; // Modulo 256
+          if (lost) {
+            const bool resync = (lost >= kLostThr && lost <= kReqFrames);
+            if (resync)
+              FEM.daq_credit += lost;
+            FEM.framesLost += lost;
+            if (nLostMsgs++ < 100) {
+              const std::string msg =
+                  "[SYNC] " + GetTimeStampFromUnixTime(getCurrentTime()) +
+                  " FEM " + std::to_string(FEM.femID) + ": " +
+                  std::to_string(lost) + " frame(s) lost (sequence " +
+                  std::to_string(seqExpected) + " expected, " +
+                  std::to_string(seq) + " received)";
+              std::cout << msg << std::endl;
+              if (FEM.logFile) {
+                fprintf(FEM.logFile, "%s\n", msg.c_str());
+                fflush(FEM.logFile);
+              }
+            }
+          }
+          seqExpected = seq + 1;
+        }
+      }
       // const std::deque<uint16_t> frame (&buf_rcv[1], &buf_rcv[size -1]);
       FEM.daq_credit++;
       FEM.mutex_mem.lock();
       FEM.tmpBuffer.insert(FEM.tmpBuffer.end(), &buf_rcv[1],
                            &buf_rcv[size - offset]);
       FEM.mutex_mem.unlock();
+      FEM.credit_cv.notify_one();
       if (runConfig.verboseLevel >= RunConfig::Verbosity::Debug) {
         PrintMonitoring(&buf_rcv[1], size - 1, FEM);
         std::cout << "FEM " << FEM.femID << " Packet buffered with size "
@@ -199,6 +264,14 @@ void FEMDAQARCFEM::FEMReceiverThread(FEMProxy &FEM) {
 }
 
 void FEMDAQARCFEM::startDAQ(const std::vector<std::string> &flags) {
+
+  // Reset the receiver state before the builder starts and "daq" is sent
+  for (auto &FEM : FEMArray) {
+    FEM.mutex_mem.lock();
+    FEM.tmpBuffer.clear();
+    FEM.mutex_mem.unlock();
+    FEM.daq_credit = 0;
+  }
 
   stopEventBuilder = false;
   stopRun = false;
@@ -282,6 +355,10 @@ void FEMDAQARCFEM::PrintMonitoring(uint16_t *buff, const uint16_t &size,
 
 void FEMDAQARCFEM::EventBuilder() {
 
+  // Max timestamp difference allowed between FEMs, in ticks of 10 ns
+  constexpr uint64_t kTsTolerance = 100;
+  auto tsDiff = [](uint64_t a, uint64_t b) { return a > b ? a - b : b - a; };
+
   double lastTimeSaved = runStartTime;
   uint32_t ev_count = 0;
   uint64_t ts = 0x0;
@@ -294,6 +371,22 @@ void FEMDAQARCFEM::EventBuilder() {
   int tC = 0;
   std::vector<uint16_t> eventBuffer;
   eventBuffer.reserve(72 * 4 * 600);
+  std::vector<uint16_t> localBuffer; // swapped with FEM.tmpBuffer
+
+  // Sync check between FEMs: all of them must read the same event
+  bool lastInSync = true;
+  uint64_t nChecked = 0;
+  nOutOfSync = 0;
+
+  // Writes a sync message to stdout and to the log of every active FEM
+  auto logSync = [&](const std::string &msg) {
+    std::cout << msg << std::endl;
+    for (auto &FEM : FEMArray)
+      if (FEM.active && FEM.logFile) {
+        fprintf(FEM.logFile, "%s\n", msg.c_str());
+        fflush(FEM.logFile);
+      }
+  };
 
   // Initialize FEMs
   for (auto &FEM : FEMArray) {
@@ -307,32 +400,95 @@ void FEMDAQARCFEM::EventBuilder() {
     newEvent = true;
 
     for (auto &FEM : FEMArray) {
+      if (!FEM.active) // Inactive FEMs never send data
+        continue;
+
+      // Take the data received so far, the lock is only held for the swap
       FEM.mutex_mem.lock();
-      if (!FEM.tmpBuffer.empty()) {
-        // Data is moved from tmp buffer to avoid lock
-        FEM.buffer.insert(FEM.buffer.end(),
-                          std::make_move_iterator(FEM.tmpBuffer.begin()),
-                          std::make_move_iterator(FEM.tmpBuffer.end()));
-        FEM.tmpBuffer.clear();
-      }
+      localBuffer.swap(FEM.tmpBuffer);
       FEM.mutex_mem.unlock();
+
+      FEM.buffer.insert(FEM.buffer.end(), localBuffer.begin(),
+                        localBuffer.end());
+      localBuffer.clear();
 
       emptyBuffer &= FEM.buffer.empty();
 
       if (!FEM.buffer.empty() && FEM.pendingEvent) {
         FEM.pendingEvent = !packetAPI.TryExtractNextEvent(
             FEM.buffer, FEM.bufferIndex, eventBuffer);
-      }
 
-      if (!FEM.pendingEvent)
-        packetAPI.ParseEventFromWords(eventBuffer, sEvent, ts, ev_count);
+        if (!FEM.pendingEvent) {
+          ev_count = FEMProxy::kNoEvCount; // Stays if there is no header
+          packetAPI.ParseEventFromWords(eventBuffer, sEvent, ts, ev_count);
+          FEM.evCount = ev_count;
+          FEM.evTs = ts;
+        }
+      }
       newEvent &= !FEM.pendingEvent; // Check if the event is pending
       eventBuffer.clear();
     }
 
     if (newEvent) { // Save Event if closed
-      sEvent.eventID = ev_count;
-      sEvent.timestamp = (double)ts * 1.E-8 + runStartTime;
+
+      // Check the sync of the FEMs: the events must have the same time.
+      // The reference is the FEM whose time agrees with most of the FEMs
+      const FEMProxy *ref = nullptr;
+      int nActive = 0, bestVotes = 0;
+      for (const auto &FEM : FEMArray) {
+        if (!FEM.active)
+          continue;
+        ++nActive;
+        if (FEM.evCount == FEMProxy::kNoEvCount) // Event without header
+          continue;
+        int votes = 0;
+        for (const auto &other : FEMArray)
+          if (other.active && other.evCount != FEMProxy::kNoEvCount &&
+              tsDiff(other.evTs, FEM.evTs) <= kTsTolerance)
+            ++votes;
+        if (votes > bestVotes) {
+          bestVotes = votes;
+          ref = &FEM;
+        }
+      }
+      const bool inSync = (bestVotes == nActive);
+      const bool hasMajority = (bestVotes * 2 > nActive);
+
+      ++nChecked;
+      if (!inSync)
+        ++nOutOfSync;
+
+      // Log only when the sync state changes, not on every event
+      if (inSync != lastInSync) {
+        std::ostringstream msg;
+        msg << "[SYNC] "
+            << (inSync ? "FEMs back in sync" : "ERROR FEMs out of sync")
+            << " at DAQ event " << storedEvents << " (" << nOutOfSync
+            << " events out of sync so far)";
+        if (!inSync && !hasMajority)
+          msg << " [no majority, event ID and time not reliable]";
+        for (const auto &FEM : FEMArray) {
+          if (!FEM.active)
+            continue;
+          msg << " | FEM " << FEM.femID << " cnt=";
+          if (FEM.evCount == FEMProxy::kNoEvCount)
+            msg << "no header";
+          else
+            msg << FEM.evCount << " ts=" << FEM.evTs;
+          if (ref && FEM.evCount != FEMProxy::kNoEvCount)
+            msg << " (" << std::showpos
+                << (int64_t)FEM.evTs - (int64_t)ref->evTs << std::noshowpos
+                << ")";
+        }
+        logSync(msg.str());
+        lastInSync = inSync;
+      }
+
+      // The event ID and the time are the ones of the majority of the FEMs.
+      // Without majority the ID is the number of events stored
+      sEvent.eventID =
+          hasMajority ? ref->evCount : static_cast<uint32_t>(storedEvents);
+      sEvent.timestamp = (double)(ref ? ref->evTs : 0) * 1.E-8 + runStartTime;
 
       if (storedEvents == 0) {
         if (runConfig.verboseLevel >= RunConfig::Verbosity::Info)
@@ -343,6 +499,16 @@ void FEMDAQARCFEM::EventBuilder() {
       }
 
       if (fileRoot && !sEvent.signalsID.empty()) {
+        // Event counter and timestamp read from each active FEM
+        // (sEvent.Clear() below empties them after the event is stored)
+        for (const auto &FEM : FEMArray) {
+          if (!FEM.active)
+            continue;
+          sEvent.femID.push_back(FEM.femID);
+          sEvent.femEventCount.push_back(FEM.evCount);
+          sEvent.femTimestamp.push_back(FEM.evTs);
+        }
+
         FillTree(sEvent.timestamp, lastTimeSaved);
 
         if (storedEvents % 100 == 0) {
@@ -370,7 +536,7 @@ void FEMDAQARCFEM::EventBuilder() {
       if (tC >= 500)
         break;
     }
-    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    std::this_thread::sleep_for(std::chrono::microseconds(500));
   }
 
   if (runConfig.verboseLevel >= RunConfig::Verbosity::Info)
@@ -396,6 +562,18 @@ void FEMDAQARCFEM::EventBuilder() {
 
     WriteRunEndTime(runEndTime);
   }
+
+  // Sync summary of the run
+  std::ostringstream summary;
+  summary << "[SYNC] " << nChecked - nOutOfSync << " of " << nChecked
+          << " events in sync";
+  if (nOutOfSync)
+    summary << ", " << nOutOfSync << " POSSIBLY OUT OF SYNC";
+  logSync(summary.str());
+  for (auto &FEM : FEMArray)
+    if (FEM.active)
+      summary << " | FEM " << FEM.femID << ": " << FEM.framesLost
+              << " frames lost";
 
   std::cout << "End of event builder " << GetTimeStampFromUnixTime(runEndTime)
             << " " << storedEvents << " events acquired in "

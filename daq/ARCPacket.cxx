@@ -386,38 +386,52 @@ bool TryExtractNextEvent(std::deque<uint16_t> &buffer, size_t &idx,
   bool endOfEvent = false;
   const size_t buffSize = buffer.size();
 
-  while (idx < buffSize) {
-    uint16_t w = buffer[idx];
+  // Walking the deque with an iterator is much faster than indexing it. The
+  // iterator follows pos (a local copy of idx) and is never moved beyond the
+  // end of the buffer
+  size_t pos = idx;
+  auto it = buffer.begin();
+  if (pos < buffSize)
+    it += pos;
+
+  while (pos < buffSize) {
+    const uint16_t w = *it;
+    // The ADC samples are almost all the words, they are checked first
+    if ((w & PFX_12_BIT_CONTENT_MASK) == PFX_ADC_SAMPLE ||
+        (w & PFX_9_BIT_CONTENT_MASK) == PFX_TIME_BIN_IX) {
+      if (++pos < buffSize)
+        ++it;
+      continue;
+    }
+
+    size_t step = 1;
     if ((w & PFX_9_BIT_CONTENT_MASK) == PFX_START_OF_DFRAME) {
-      idx += 2;
+      step = 2;
     } else if ((w & PFX_9_BIT_CONTENT_MASK) == PFX_START_OF_MFRAME) {
-      idx += 2;
+      step = 2;
     } else if ((w & PFX_0_BIT_CONTENT_MASK) == PFX_EXTD_CARD_CHIP_CHAN_H_MD) {
-      idx += 6;
+      step = 6;
     } else if ((w & PFX_8_BIT_CONTENT_MASK) == PFX_START_OF_EVENT_ARC) {
-      idx += 6;
+      step = 6;
     } else if ((w & PFX_9_BIT_CONTENT_MASK) == PFX_CHIP_CHAN_HIT_CNT) {
-      idx++;
     } else if ((w & PFX_11_BIT_CONTENT_MASK) == PFX_CHIP_LAST_CELL_READ_ARC) {
-      idx++;
     } else if ((w & PFX_0_BIT_CONTENT_MASK) == PFX_EXTD_CARD_CHIP_CHAN_HIT_IX) {
-      idx += 2;
-    } else if ((w & PFX_12_BIT_CONTENT_MASK) == PFX_ADC_SAMPLE ||
-               (w & PFX_9_BIT_CONTENT_MASK) == PFX_TIME_BIN_IX) {
-      idx++;
+      step = 2;
     } else if ((w & PFX_6_BIT_CONTENT_MASK) == PFX_END_OF_EVENT_ARC) {
-      idx += 4;
+      pos += 4;
       endOfEvent = true;
       break;
     } else if ((w & PFX_0_BIT_CONTENT_MASK) == PFX_END_OF_FRAME) {
-      idx++;
     } else {
       printf(
           "TryExtractNextEvent WARNING: word : 0x%x (%d) unknown data at %d \n",
-          w, w, idx);
-      idx++;
+          w, w, pos);
     }
+    pos += step;
+    if (pos < buffSize)
+      it += step;
   }
+  idx = pos;
 
   if (!endOfEvent) {
     return false; // incomplete event
@@ -440,6 +454,7 @@ void ParseEventFromWords(std::vector<uint16_t> &event, SignalEvent &sEvent,
     return;
   size_t idx = 0;
   const size_t buffSize = event.size();
+  std::vector<short> sData(512, 0); // Reused for every channel
 
   while (idx < buffSize) {
     size_t w = event[idx];
@@ -487,7 +502,7 @@ void ParseEventFromWords(std::vector<uint16_t> &event, SignalEvent &sEvent,
       // PhysChann "<<physChannel<<std::endl;
       idx++;
       int timeBin = 0;
-      std::vector<short> sData(512, 0);
+      std::fill(sData.begin(), sData.end(), 0);
       while ((event[idx] & PFX_12_BIT_CONTENT_MASK) == PFX_ADC_SAMPLE ||
              (event[idx] & PFX_9_BIT_CONTENT_MASK) == PFX_TIME_BIN_IX) {
 

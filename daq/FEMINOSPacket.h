@@ -116,7 +116,8 @@
 // "0000000000000100" : available for future use
 // "0000000000000011" : available for future use
 // "0000000000000010" : available for future use
-// "0000000000000001" : available for future use
+// Not sent by the Feminos, femdaq inserts it in the data where frames were lost
+#define PFX_FRAME_LOSS_MARKER 0x0001
 #define PFX_NULL_CONTENT 0x0000 // Null content
 
 //
@@ -182,6 +183,8 @@ bool TryExtractNextEvent(std::deque<uint16_t> &buffer, size_t &idx,
                          std::vector<uint16_t> &out);
 void ParseEventFromWords(std::vector<uint16_t> &event, SignalEvent &sEvent,
                          uint64_t &tS, uint32_t &ev_count);
+int GetEventHeader(const std::vector<uint16_t> &event, size_t &sofPos,
+                   uint64_t &tS, uint32_t &ev_count, bool &lostFrames);
 void ConfigPacket_Print(uint16_t *fr, const uint16_t &size, FILE *fp = stdout);
 void GetPedestalEvent(std::deque<uint16_t> &buffer, SignalEvent &sEvent);
 bool isDataFrame(uint16_t *fr);

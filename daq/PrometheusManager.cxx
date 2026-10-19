@@ -21,6 +21,15 @@ PrometheusManager::PrometheusManager()
                        .Help("Events acquired")
                        .Register(*_registry)
                        .Add({})),
+      _lostFramesFamily(BuildGauge()
+                            .Name("lost_frames_total")
+                            .Help("Data frames lost per FEM in the run")
+                            .Register(*_registry)),
+      _partialEventsGauge(BuildGauge()
+                              .Name("partial_events_total")
+                              .Help("Events built without all the FEMs")
+                              .Register(*_registry)
+                              .Add({})),
       _infoFamily(BuildInfo()
                       .Name("run_metadata")
                       .Help("Run Metadata")
@@ -45,6 +54,14 @@ void PrometheusManager::setRunNumber(int num) { _runNumberGauge.Set(num); }
 void PrometheusManager::setRate(double rate) { _rateGauge.Set(rate); }
 
 void PrometheusManager::setEvents(int count) { _eventsGauge.Set(count); }
+
+void PrometheusManager::setLostFrames(int femID, double count) {
+  _lostFramesFamily.Add({{"fem", std::to_string(femID)}}).Set(count);
+}
+
+void PrometheusManager::setPartialEvents(double count) {
+  _partialEventsGauge.Set(count);
+}
 
 void PrometheusManager::setMetadata(const std::string &name) {
   _infoFamily.Add({{"runName", name}});

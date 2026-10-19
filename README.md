@@ -94,6 +94,9 @@ run:
   maxFileSize: 100Mb
   updateRate: 5s
   electronics: ARC
+  daqCredits: 5440
+  daqCreditThreshold: 272
+  resync: true
   FEM:
     - id: 0
       IP: 192.168.10.2
@@ -105,6 +108,21 @@ run:
 
 Note that the fields under the node `Info` are not required, other fields can be added under this node and they will be
 requested to be updated after issue `addMetadata`
+
+The following optional fields apply to `ARC` and `FEMINOS` electronics:
+
+* `daqCredits`: number of data frames a FEM may send before it receives new credits. The credits of the frames
+received are requested again as soon as `daqCreditThreshold` frames are pending, so there are never more than
+`daqCredits` frames in flight. A small value avoids that the switch or the socket buffers overflow when several FEMs
+send at the same time, which loses UDP frames. Defaults: 8 frames and threshold 1 for `FEMINOS` (as
+`credits restore 8 1 F` in `mclient`), 5440 frames and threshold 272 for `ARC`.
+* `resync`: if `true` (default) the events of the FEMs are matched by timestamp: when a FEM misses an event (e.g. lost
+frames) that event is built without it, instead of shifting all the next events of the run. It requires the
+timestamps of the FEMs to be synchronized (TCM timestamp clear). If `false` the events are matched by arrival order.
+
+For `FEMINOS` the sequence number of the data frames is checked: lost frames are reported in the console and the FEM
+logs (`[SYNC]` messages), their credits are restored and the incomplete events are dropped. The `femID`,
+`femEventCount` and `femTimestamp` branches of the ROOT file list the FEMs included in each event.
 
 ### Event display
 

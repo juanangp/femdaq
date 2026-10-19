@@ -206,6 +206,8 @@ bool TryExtractNextEvent(std::deque<uint16_t> &buffer, size_t &idx,
                          std::vector<uint16_t> &out);
 void ParseEventFromWords(std::vector<uint16_t> &event, SignalEvent &sEvent,
                          uint64_t &tS, uint32_t &ev_count);
+int GetEventHeader(const std::vector<uint16_t> &event, size_t &sofPos,
+                   uint64_t &tS, uint32_t &ev_count, bool &lostFrames);
 void ConfigPacket_Print(uint16_t *fr, const uint16_t &size, FILE *fp = stdout);
 bool isDataFrame(uint16_t *fr);
 bool isMFrame(uint16_t *fr);

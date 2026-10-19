@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <condition_variable>
 #include <cstdint>
 #include <deque>
 #include <mutex>
@@ -58,6 +59,9 @@ public:
   std::atomic<uint32_t> cmd_sent{0};
   std::atomic<uint32_t> cmd_rcv{0};
   std::atomic<uint32_t> daq_credit{0};
+  // Wakes up the DAQ command thread when frames are received
+  std::condition_variable credit_cv;
+  std::mutex credit_m;
   std::atomic<uint64_t> framesLost{0};
   int femID = 0;
   size_t bufferIndex = 0;

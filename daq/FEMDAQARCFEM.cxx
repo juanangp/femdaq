@@ -64,14 +64,21 @@ void FEMDAQARCFEM::SendDAQCmdThread(FEMProxy &FEM) {
   //  FEM.daq_credit = 0;
   // Frames the FEM may send without waiting for a new request. A smaller
   // value limits the burst that the ethernet buffer of the FEM has to absorb
-  const uint32_t reqFrames = 44;
-  const uint32_t frameThr = 11;
+  const uint32_t reqFrames = kReqFrames;
+  const uint32_t frameThr = kFrameThr;
   uint8_t seq = 0x00;
   // First daq request, do not add sequence number
   sprintf(daq_cmd, "daq 0x%06x F\n", reqFrames);
   SendCommand(daq_cmd, FEM, false);
 
   while (!abrt && !stopRun) {
+    {
+      // The receiver thread notifies every frame, the timeout only bounds the
+      // delay of a missed notification and of abrt/stopRun
+      std::unique_lock<std::mutex> lk(FEM.credit_m);
+      FEM.credit_cv.wait_for(lk, std::chrono::milliseconds(1),
+                             [&] { return FEM.daq_credit >= frameThr; });
+    }
     while (FEM.daq_credit >= frameThr) { // send all the pending requests
       if (runConfig.verboseLevel >= RunConfig::Verbosity::Debug)
         std::cout << "FEM " << FEM.femID << " Daq frames credits "
@@ -82,7 +89,6 @@ void FEMDAQARCFEM::SendDAQCmdThread(FEMProxy &FEM) {
       FEM.daq_credit -= frameThr;
       seq++;
     }
-    std::this_thread::sleep_for(std::chrono::milliseconds(1));
   }
 
   SendCommand("daq 0x000000 F\n", FEM, false);
@@ -130,6 +136,17 @@ void FEMDAQARCFEM::SendCommand(const char *cmd, FEMProxy &FEM, bool wait) {
 
   FEM.cmd_sent++;
   waitForCmd(FEM);
+}
+
+void FEMDAQARCFEM::CreditsShow() {
+
+  for (auto &FEM : FEMArray) {
+    if (FEM.active && FEM.logFile) {
+      fprintf(FEM.logFile, ">> FEM %u frameThr %u reqFrames %u\n", FEM.femID,
+              kFrameThr, kReqFrames);
+      fflush(FEM.logFile);
+    }
+  }
 }
 
 void FEMDAQARCFEM::waitForCmd(FEMProxy &FEM) {
@@ -199,6 +216,9 @@ void FEMDAQARCFEM::FEMReceiverThread(FEMProxy &FEM) {
           const uint8_t seq = buf_rcv[0] & 0xFF;
           const uint8_t lost = seq - seqExpected; // Modulo 256
           if (lost) {
+            const bool resync = (lost >= kLostThr && lost <= kReqFrames);
+            if (resync)
+              FEM.daq_credit += lost;
             FEM.framesLost += lost;
             if (nLostMsgs++ < 100) {
               const std::string msg =
@@ -223,6 +243,7 @@ void FEMDAQARCFEM::FEMReceiverThread(FEMProxy &FEM) {
       FEM.tmpBuffer.insert(FEM.tmpBuffer.end(), &buf_rcv[1],
                            &buf_rcv[size - offset]);
       FEM.mutex_mem.unlock();
+      FEM.credit_cv.notify_one();
       if (runConfig.verboseLevel >= RunConfig::Verbosity::Debug) {
         PrintMonitoring(&buf_rcv[1], size - 1, FEM);
         std::cout << "FEM " << FEM.femID << " Packet buffered with size "
@@ -508,7 +529,7 @@ void FEMDAQARCFEM::EventBuilder() {
       if (tC >= 500)
         break;
     }
-    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    std::this_thread::sleep_for(std::chrono::microseconds(500));
   }
 
   if (runConfig.verboseLevel >= RunConfig::Verbosity::Info)

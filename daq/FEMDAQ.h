@@ -61,6 +61,21 @@ public:
   void UpdateThread();
   void UpdateRunConfigInfo() { runConfig.UpdateInfo(); }
 
+  virtual void CreditsRestore() {
+    std::cout << "WARNING credits restore not implemented in this electronics"
+              << std::endl;
+  }
+
+  virtual void CreditsRestore(uint32_t frameThr, uint32_t reqFrames) {
+    std::cout << "WARNING credits restore not implemented in this electronics"
+              << std::endl;
+  }
+
+  virtual void CreditsShow() {
+    std::cout << "WARNING credits not implemented in this electronics"
+              << std::endl;
+  }
+
   bool isReadOnly() const { return runConfig.readOnly; }
 
   static double getCurrentTime();

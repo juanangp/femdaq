@@ -59,6 +59,8 @@ void CommandFetcher::handleCommand(const std::string &line) {
     // Close log and root files
     if (!daq->isReadOnly())
       daq->CloseFiles();
+  } else if (cmd == "credits") {
+    handleCreditsCommand(args);
   } else if (cmd == "startDAQ") {
     // Start acquisiton loop
     daq->startDAQ(args);
@@ -83,6 +85,47 @@ void CommandFetcher::handleCommand(const std::string &line) {
   } else {
     // Send cmd to to DAQ
     daq->SendCommand(line.c_str());
+  }
+}
+
+void CommandFetcher::handleCreditsCommand(
+    const std::vector<std::string> &args) {
+
+  if (args.empty()) {
+    std::cout << "Usage: credits show | credits restore [frameThr reqFrames]"
+              << std::endl;
+    return;
+  }
+
+  const std::string &subCmd = args[0];
+
+  if (subCmd == "show") {
+    daq->CreditsShow();
+  } else if (subCmd == "restore") {
+    if (args.size() == 1) {
+      daq->CreditsRestore();
+    } else if (args.size() >= 3) {
+      uint32_t frameThr = 0;
+      uint32_t reqFrames = 0;
+
+      auto res1 = std::from_chars(args[1].data(),
+                                  args[1].data() + args[1].size(), frameThr);
+      auto res2 = std::from_chars(args[2].data(),
+                                  args[2].data() + args[2].size(), reqFrames);
+
+      if (res1.ec == std::errc() && res2.ec == std::errc()) {
+        daq->CreditsRestore(frameThr, reqFrames);
+      } else {
+        std::cout << "Error: Invalid integer arguments for credits restore."
+                  << std::endl;
+      }
+    } else {
+      std::cout << "Usage: credits restore (to use defaults) OR credits "
+                   "restore <frameThr> <reqFrames>"
+                << std::endl;
+    }
+  } else {
+    std::cout << "Unknown credits sub-command: " << subCmd << std::endl;
   }
 }
 

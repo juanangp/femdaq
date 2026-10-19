@@ -19,6 +19,22 @@ public:
 
   static std::atomic<bool> stopReceiver;
 
+  // limits the burst that the switch and the socket buffers have to absorb
+  uint32_t kReqFrames = 8;
+  // Pending frames needed to send a new request
+  uint32_t kFrameThr = 2;
+  // Lost frames that trigger a resync of the credits
+  uint8_t kLostThr = 1;
+
+  virtual void CreditsRestore() override { CreditsRestore(2, 8); }
+
+  virtual void CreditsRestore(uint32_t frameThr, uint32_t reqFrames) override {
+    kFrameThr = frameThr;
+    kReqFrames = reqFrames;
+  }
+
+  virtual void CreditsShow() override;
+
   std::vector<std::thread> receiverThreads;
 
   explicit FEMDAQARCFEM(RunConfig &rC);

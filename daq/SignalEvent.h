@@ -12,6 +12,9 @@ public:
   double timestamp = 0;
   std::vector<int> signalsID;
   std::vector<short> pulses;
+  std::vector<int> femID;
+  std::vector<uint32_t> femEventCount;
+  std::vector<uint64_t> femTimestamp;
 
   SignalEvent() = default;
   ~SignalEvent() = default;
@@ -33,5 +36,8 @@ public:
   inline void Clear() {
     signalsID.clear();
     pulses.clear();
+    femID.clear();
+    femEventCount.clear();
+    femTimestamp.clear();
   }
 };

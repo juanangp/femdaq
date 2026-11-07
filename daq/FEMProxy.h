@@ -1,8 +1,12 @@
 #pragma once
 
+#include <atomic>
+#include <condition_variable>
+#include <cstdint>
 #include <deque>
 #include <mutex>
 #include <string>
+#include <vector>
 
 #include "FEMSocket.h"
 
@@ -19,11 +23,14 @@ public:
     active = other.active;
     femID = other.femID;
     bufferIndex = other.bufferIndex;
+    evCount = other.evCount;
+    evTs = other.evTs;
     buffer = std::move(other.buffer);
     tmpBuffer = std::move(other.tmpBuffer);
     cmd_sent.store(other.cmd_sent.load());
     cmd_rcv.store(other.cmd_rcv.load());
     daq_credit.store(other.daq_credit.load());
+    framesLost.store(other.framesLost.load());
   }
 
   FEMProxy &operator=(FEMProxy &&other) noexcept {
@@ -33,12 +40,15 @@ public:
       active = other.active;
       femID = other.femID;
       bufferIndex = other.bufferIndex;
+      evCount = other.evCount;
+      evTs = other.evTs;
       buffer = std::move(other.buffer);
       tmpBuffer = std::move(other.tmpBuffer);
 
       cmd_sent.store(other.cmd_sent.load());
       cmd_rcv.store(other.cmd_rcv.load());
       daq_credit.store(other.daq_credit.load());
+      framesLost.store(other.framesLost.load());
     }
     return *this;
   }
@@ -49,8 +59,18 @@ public:
   std::atomic<uint32_t> cmd_sent{0};
   std::atomic<uint32_t> cmd_rcv{0};
   std::atomic<uint32_t> daq_credit{0};
+  // Wakes up the DAQ command thread when frames are received
+  std::condition_variable credit_cv;
+  std::mutex credit_m;
+  std::atomic<uint64_t> framesLost{0};
   int femID = 0;
   size_t bufferIndex = 0;
+
+  // Event counter of an event without Start-Of-Event header
+  static constexpr uint32_t kNoEvCount = 0xFFFFFFFF;
+  // Event counter and timestamp (ticks of 10 ns) of the last event read
+  uint32_t evCount = kNoEvCount;
+  uint64_t evTs = 0;
 
   std::vector<uint16_t> tmpBuffer;
   std::deque<uint16_t> buffer;

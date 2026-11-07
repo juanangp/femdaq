@@ -244,6 +244,9 @@ void FEMDAQ::OpenRootFile() {
   event_tree->Branch("timestamp", &sEvent.timestamp);
   event_tree->Branch("signalsID", &sEvent.signalsID);
   event_tree->Branch("pulses", &sEvent.pulses);
+  event_tree->Branch("femID", &sEvent.femID);
+  event_tree->Branch("femEventCount", &sEvent.femEventCount);
+  event_tree->Branch("femTimestamp", &sEvent.femTimestamp);
   event_tree->SetAutoFlush(-30000000); // 30 MB
 
   const std::string yamlDump = runConfig.Dump();
@@ -402,6 +405,7 @@ void FEMDAQ::UpdateThread() {
     const double rate = (evCount - prevEvCount) / elapsed;
 
     prometheus.setEvents(evCount);
+    prometheus.setDesyncEvents(nOutOfSync);
     prometheus.setRate(rate);
 
     if (runConfig.verboseLevel >= RunConfig::Verbosity::Info &&

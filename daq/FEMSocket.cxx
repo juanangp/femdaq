@@ -18,10 +18,22 @@ void FEMSocket::Open(const std::string &ip) {
                              std::string(strerror(errno)));
   }
 
-  // 2. Set Receive Buffer Size to 400 KB
-  int rcvsz_req = 400 * 1024;
+  // 2. Set Receive Buffer Size to 8MB
+  int rcvsz_req = 8 * 1024 * 1024;
   socklen_t optlen = sizeof(int);
   setsockopt(client, SOL_SOCKET, SO_RCVBUF, &rcvsz_req, optlen);
+  int rcvsz = 0;
+  getsockopt(client, SOL_SOCKET, SO_RCVBUF, &rcvsz, &optlen);
+  if (rcvsz < 2 * rcvsz_req) {
+    // The kernel limits the size to net.core.rmem_max (the value returned is
+    // twice the granted one). Try to skip the limit, it needs CAP_NET_ADMIN
+    setsockopt(client, SOL_SOCKET, SO_RCVBUFFORCE, &rcvsz_req, optlen);
+    getsockopt(client, SOL_SOCKET, SO_RCVBUF, &rcvsz, &optlen);
+  }
+  if (rcvsz < 2 * rcvsz_req)
+    std::cerr << "[WARNING] Socket receive buffer of " << ip << " is only "
+              << rcvsz / 1024 << " KB, packets can be lost. Raise the limit "
+              << "with: sysctl -w net.core.rmem_max=" << rcvsz_req << std::endl;
 
   // 3. Set Receive Timeout (1 second)
   // This allows the thread to unblock from recvfrom and check 'stopReceiver'

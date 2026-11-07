@@ -21,6 +21,11 @@ PrometheusManager::PrometheusManager()
                        .Help("Events acquired")
                        .Register(*_registry)
                        .Add({})),
+      _desyncEventsGauge(BuildGauge()
+                             .Name("desync_events_total")
+                             .Help("Events with desyncronized FEMs")
+                             .Register(*_registry)
+                             .Add({})),
       _infoFamily(BuildInfo()
                       .Name("run_metadata")
                       .Help("Run Metadata")
@@ -45,6 +50,10 @@ void PrometheusManager::setRunNumber(int num) { _runNumberGauge.Set(num); }
 void PrometheusManager::setRate(double rate) { _rateGauge.Set(rate); }
 
 void PrometheusManager::setEvents(int count) { _eventsGauge.Set(count); }
+
+void PrometheusManager::setDesyncEvents(int count) {
+  _desyncEventsGauge.Set(count);
+}
 
 void PrometheusManager::setMetadata(const std::string &name) {
   _infoFamily.Add({{"runName", name}});

@@ -61,6 +61,21 @@ public:
   void UpdateThread();
   void UpdateRunConfigInfo() { runConfig.UpdateInfo(); }
 
+  virtual void CreditsRestore() {
+    std::cout << "WARNING credits restore not implemented in this electronics"
+              << std::endl;
+  }
+
+  virtual void CreditsRestore(uint32_t reqFrames, uint32_t frameThr) {
+    std::cout << "WARNING credits restore not implemented in this electronics"
+              << std::endl;
+  }
+
+  virtual void CreditsShow() {
+    std::cout << "WARNING credits not implemented in this electronics"
+              << std::endl;
+  }
+
   bool isReadOnly() const { return runConfig.readOnly; }
 
   static double getCurrentTime();
@@ -98,6 +113,7 @@ protected:
   std::string fileNameRoot = "";
   std::string execFile = "";
   SignalEvent sEvent;
+  int nOutOfSync = 0;
 
   PrometheusManager prometheus;
 

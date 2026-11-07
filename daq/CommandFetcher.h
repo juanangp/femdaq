@@ -32,6 +32,6 @@ public:
 
 private:
   void handleCommand(const std::string &line);
-
+  void handleCreditsCommand(const std::vector<std::string> &args);
   std::string histFile;
 };
